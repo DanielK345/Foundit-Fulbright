@@ -44,7 +44,9 @@ def chunk_pages(pages: list[dict], chunk_size: int = 400, overlap: int = 50) -> 
                 chunk_text = " ".join(current_chunk_sentences)
                 chunks.append({
                     "chunk_id": f"chunk_{chunk_counter}",
+                    "filename": page.get("filename"),
                     "source": source,
+                    "source_label": page.get("source_label", source),
                     "content": chunk_text,
                 })
                 chunk_counter += 1
@@ -70,7 +72,9 @@ def chunk_pages(pages: list[dict], chunk_size: int = 400, overlap: int = 50) -> 
             chunk_text = " ".join(current_chunk_sentences)
             chunks.append({
                 "chunk_id": f"chunk_{chunk_counter}",
+                "filename": page.get("filename"),
                 "source": source,
+                "source_label": page.get("source_label", source),
                 "content": chunk_text,
             })
             chunk_counter += 1

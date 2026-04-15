@@ -1,9 +1,6 @@
 import uuid
 from fastapi import APIRouter, HTTPException
 from models.schema import ExamConfig, ExamResponse, Question, GradeRequest, GradeResponse
-from services.chunker import chunk_pages
-from services.embedder import build_faiss_index
-from services.retriever import retrieve_chunks
 from services.generator import generate_questions
 from services.validator import validate_questions
 from services.grader import grade_exam
@@ -22,32 +19,28 @@ async def generate_exam(config: ExamConfig):
     doc = documents_store[config.document_id]
     pages = doc["pages"]
 
-    # Step 1: Chunk the document
-    chunks = chunk_pages(pages)
-    if not chunks:
-        raise HTTPException(status_code=400, detail="No text chunks could be created from the document.")
+    # Build full context — send everything to Gemini directly.
+    # Slide decks are typically < 20k tokens, well within Gemini's 1M context window.
+    # RAG was fragmenting the content and degrading question quality.
+    all_chunks = [
+        {
+            "source": page.get("source", ""),
+            "source_label": page.get("source_label", page.get("source", "")),
+            "content": page["content"],
+        }
+        for page in pages
+        if page.get("content", "").strip()
+    ]
 
-    # Step 2: Build FAISS index
-    try:
-        index, indexed_chunks = build_faiss_index(chunks, config.document_id)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Embedding failed: {str(e)}")
+    if not all_chunks:
+        raise HTTPException(status_code=400, detail="No text content found in the document.")
 
-    # Step 3: Retrieve relevant chunks
-    query = config.focus if config.focus else "key concepts, important topics, main ideas"
-    retrieved = retrieve_chunks(query, index, indexed_chunks, top_k=15)
-
-    if not retrieved:
-        raise HTTPException(status_code=400, detail="No relevant content found for the given focus.")
-
-    # Step 4: Generate + Validate (with retry)
-    total_needed = config.mcq + config.true_false + config.short_answer
+    # Generate + Validate (with retry)
     all_valid = []
     max_retries = 2
     temperature = 0.7
 
     for attempt in range(max_retries + 1):
-        # Calculate how many more we need of each type
         valid_by_type = {"mcq": 0, "true_false": 0, "short_answer": 0}
         for q in all_valid:
             valid_by_type[q["type"]] = valid_by_type.get(q["type"], 0) + 1
@@ -61,11 +54,12 @@ async def generate_exam(config: ExamConfig):
 
         try:
             questions = generate_questions(
-                chunks=retrieved,
+                chunks=all_chunks,
                 mcq=need_mcq,
                 true_false=need_tf,
                 short_answer=need_sa,
                 difficulty=config.difficulty,
+                focus=config.focus,
                 temperature=temperature,
             )
         except Exception as e:
@@ -74,13 +68,12 @@ async def generate_exam(config: ExamConfig):
                 continue
             raise HTTPException(status_code=500, detail=f"Question generation failed: {str(e)}")
 
-        valid, rejected = validate_questions(questions, retrieved)
+        valid, rejected = validate_questions(questions, all_chunks)
         all_valid.extend(valid)
 
         if len(rejected) == 0 or attempt >= max_retries:
             break
 
-        # Retry with lower temperature
         temperature = 0.3
 
     if not all_valid:

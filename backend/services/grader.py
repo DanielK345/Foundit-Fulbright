@@ -82,7 +82,6 @@ def _grade_short_answer(question: str, correct_answer: str, user_answer: str) ->
     student_emb = embed_query(user_answer)
     reference_emb = embed_query(correct_answer)
     sim = _cosine_similarity(student_emb, reference_emb)
-
     if sim > SIM_CORRECT_THRESHOLD:
         return {"is_correct": True, "feedback": f"High semantic similarity ({sim:.2f})."}
 

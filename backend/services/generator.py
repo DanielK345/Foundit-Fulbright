@@ -4,26 +4,30 @@ import google.generativeai as genai
 
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
-PROMPT_TEMPLATE = """You are an exam generator.
+PROMPT_TEMPLATE = """You are an expert exam writer. Your goal is to create high-quality exam questions that genuinely test a student's understanding of the material.
 
-Your task is to generate HIGH-QUALITY exam questions strictly based on the provided CONTEXT.
+CONTENT:
+{context}
 
-RULES:
-- ONLY use information from the CONTEXT
-- DO NOT use outside knowledge
-- DO NOT hallucinate
-- If information is insufficient, SKIP the question
-- Each question must be clear, unambiguous, and test understanding
-- Avoid trivial or overly obvious questions
-- Avoid repeating the same concept
+---
 
-QUESTION QUALITY REQUIREMENTS:
-- Must test understanding, not just copying text
-- Must be specific and precise
-- Must have exactly ONE correct answer
-- Distractors (wrong options) must be plausible
+TASK: Generate the following questions based ONLY on the content above:
+- {mcq} multiple choice questions (MCQ)
+- {true_false} true/false questions
+- {short_answer} short answer questions
 
-OUTPUT FORMAT (STRICT JSON):
+Difficulty: {difficulty}
+{focus_line}
+
+GUIDELINES:
+- Test understanding and application, not rote memorization
+- MCQ distractors must be plausible — avoid obviously wrong answers
+- True/False statements must be unambiguous
+- Short answer questions should have a concise, clear correct answer
+- Cover a range of topics from across the content
+- Do not generate questions if the content is insufficient — skip that type
+
+OUTPUT (strict JSON only, no extra text):
 {{
   "questions": [
     {{
@@ -31,7 +35,7 @@ OUTPUT FORMAT (STRICT JSON):
       "question": "...",
       "options": ["A) ...", "B) ...", "C) ...", "D) ..."],
       "answer": "A",
-      "explanation": "...",
+      "explanation": "Brief explanation of why this is correct.",
       "source": "slide_3"
     }},
     {{
@@ -39,29 +43,19 @@ OUTPUT FORMAT (STRICT JSON):
       "question": "...",
       "options": ["True", "False"],
       "answer": "True",
-      "explanation": "...",
+      "explanation": "Brief explanation.",
       "source": "page_2"
     }},
     {{
       "type": "short_answer",
       "question": "...",
       "options": null,
-      "answer": "...",
-      "explanation": "...",
+      "answer": "Expected answer (1-2 sentences).",
+      "explanation": "Brief explanation.",
       "source": "page_1"
     }}
   ]
 }}
-
-CONTEXT:
-{context}
-
-Generate:
-- {mcq} MCQ questions
-- {true_false} True/False questions
-- {short_answer} Short Answer questions
-
-Difficulty: {difficulty}
 """
 
 
@@ -69,7 +63,8 @@ def build_context_block(chunks: list[dict]) -> str:
     """Build a context string from retrieved chunks."""
     parts = []
     for chunk in chunks:
-        parts.append(f"[Source: {chunk['source']}]\n{chunk['content']}")
+        source = chunk.get("source_label", chunk["source"])
+        parts.append(f"[Source: {source}]\n{chunk['content']}")
     return "\n\n".join(parts)
 
 
@@ -79,10 +74,12 @@ def generate_questions(
     true_false: int,
     short_answer: int,
     difficulty: str,
+    focus: str = None,
     temperature: float = 0.7,
 ) -> list[dict]:
-    """Generate exam questions using Gemini with RAG context."""
+    """Generate exam questions using Gemini with full document context."""
     context = build_context_block(chunks)
+    focus_line = f"Focus area: {focus}" if focus else ""
 
     prompt = PROMPT_TEMPLATE.format(
         context=context,
@@ -90,6 +87,7 @@ def generate_questions(
         true_false=true_false,
         short_answer=short_answer,
         difficulty=difficulty,
+        focus_line=focus_line,
     )
 
     model = genai.GenerativeModel(

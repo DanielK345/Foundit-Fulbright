@@ -1,7 +1,7 @@
 import os
 import uuid
 from fastapi import APIRouter, UploadFile, File, HTTPException
-from models.schema import UploadResponse
+from models.schema import UploadResponse, DocumentContextResponse, UpdateContextRequest
 from services.parser import parse_file
 
 router = APIRouter()
@@ -47,7 +47,18 @@ async def upload_files(files: list[UploadFile] = File(...)):
             os.remove(file_path)
             raise HTTPException(status_code=400, detail=f"No text content found in {safe_name}.")
 
-        all_pages.extend(parsed_pages)
+        enriched_pages = []
+        for page in parsed_pages:
+            source = page["source"]
+            enriched_pages.append({
+                "filename": safe_name,
+                "source": source,
+                "source_label": f"{safe_name} - {source}",
+                "extraction_method": page.get("extraction_method", "text"),
+                "content": page["content"],
+            })
+
+        all_pages.extend(enriched_pages)
         filenames.append(safe_name)
 
     # Store aggregated parsed data under a single document_id
@@ -64,3 +75,46 @@ async def upload_files(files: list[UploadFile] = File(...)):
         num_pages=len(all_pages),
         message=f"Successfully parsed {len(all_pages)} sections from {len(filenames)} {file_word}",
     )
+
+
+@router.get("/{document_id}/context", response_model=DocumentContextResponse)
+async def get_document_context(document_id: str):
+    from app import documents_store
+
+    if document_id not in documents_store:
+        raise HTTPException(status_code=404, detail="Document not found.")
+
+    doc = documents_store[document_id]
+
+    # Return a single merged content block
+    merged_content = doc.get("merged_content") or "\n\n".join(
+        page["content"] for page in doc["pages"] if page.get("content", "").strip()
+    )
+
+    return DocumentContextResponse(
+        document_id=document_id,
+        filenames=doc["filenames"],
+        num_sections=len(doc["pages"]),
+        merged_content=merged_content,
+    )
+
+
+@router.put("/{document_id}/context")
+async def update_document_context(document_id: str, body: UpdateContextRequest):
+    from app import documents_store
+
+    if document_id not in documents_store:
+        raise HTTPException(status_code=404, detail="Document not found.")
+
+    # Store the edited content as a single merged block.
+    # generate.py reads doc["pages"], so replace with one unified page.
+    documents_store[document_id]["merged_content"] = body.content
+    documents_store[document_id]["pages"] = [{
+        "filename": documents_store[document_id]["filenames"][0],
+        "source": "edited_content",
+        "source_label": "Edited content",
+        "extraction_method": "text",
+        "content": body.content,
+    }]
+
+    return {"message": "Context updated."}

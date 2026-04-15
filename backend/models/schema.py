@@ -34,6 +34,17 @@ class UploadResponse(BaseModel):
     message: str
 
 
+class DocumentContextResponse(BaseModel):
+    document_id: str
+    filenames: list[str]
+    num_sections: int
+    merged_content: str
+
+
+class UpdateContextRequest(BaseModel):
+    content: str
+
+
 class GradeRequest(BaseModel):
     exam_id: str
     answers: dict[str, str]  # question index (str) -> user answer
