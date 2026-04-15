@@ -26,6 +26,7 @@ GUIDELINES:
 - Short answer questions should have a concise, clear correct answer
 - Cover a range of topics from across the content
 - Do not generate questions if the content is insufficient — skip that type
+- Do not ask questions that fail to test knowledge of the material, e.g which is not mentioned in the content
 
 OUTPUT (strict JSON only, no extra text):
 {{
