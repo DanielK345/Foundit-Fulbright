@@ -59,6 +59,38 @@ OUTPUT (strict JSON only, no extra text):
 """
 
 
+IDEAS_PROMPT = """You are summarizing educational slides or notes so a student can review the core material before an exam.
+
+CONTENT:
+{context}
+
+---
+
+TASK: Extract the key main ideas, core concepts, and important topics from this material.
+
+GUIDELINES:
+- Use bullet points or short paragraphs — make it scannable
+- Include important definitions, processes, formulas, or frameworks
+- Group related ideas together if it helps clarity
+- Aim for a thorough but concise overview (300–600 words)
+- Do NOT include any intro line like "Here are the main ideas" — output the content directly
+
+Output only the summary."""
+
+
+def extract_main_ideas(chunks: list[dict]) -> str:
+    """Use Gemini to extract and summarize the main ideas from document chunks."""
+    context = build_context_block(chunks)
+    prompt = IDEAS_PROMPT.format(context=context)
+
+    model = genai.GenerativeModel(
+        "gemini-2.0-flash",
+        generation_config=genai.GenerationConfig(temperature=0.3),
+    )
+    response = model.generate_content(prompt)
+    return response.text.strip()
+
+
 def build_context_block(chunks: list[dict]) -> str:
     """Build a context string from retrieved chunks."""
     parts = []

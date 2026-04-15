@@ -1,7 +1,7 @@
 import os
 import uuid
 from fastapi import APIRouter, UploadFile, File, HTTPException
-from models.schema import UploadResponse, DocumentContextResponse, UpdateContextRequest
+from models.schema import UploadResponse, DocumentContextResponse, UpdateContextRequest, IdeasResponse
 from services.parser import parse_file
 
 router = APIRouter()
@@ -118,3 +118,33 @@ async def update_document_context(document_id: str, body: UpdateContextRequest):
     }]
 
     return {"message": "Context updated."}
+
+
+@router.post("/{document_id}/ideas", response_model=IdeasResponse)
+async def extract_document_ideas(document_id: str):
+    from app import documents_store
+    from services.generator import extract_main_ideas
+
+    if document_id not in documents_store:
+        raise HTTPException(status_code=404, detail="Document not found.")
+
+    doc = documents_store[document_id]
+    all_chunks = [
+        {
+            "source": page.get("source", ""),
+            "source_label": page.get("source_label", page.get("source", "")),
+            "content": page["content"],
+        }
+        for page in doc["pages"]
+        if page.get("content", "").strip()
+    ]
+
+    if not all_chunks:
+        raise HTTPException(status_code=400, detail="No text content found in the document.")
+
+    try:
+        ideas = extract_main_ideas(all_chunks)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Idea extraction failed: {str(e)}")
+
+    return IdeasResponse(ideas=ideas)

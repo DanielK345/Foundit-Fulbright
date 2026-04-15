@@ -7,6 +7,7 @@ import {
 } from "react-router-dom";
 import axios from "axios";
 import UploadDashboardPage from "./pages/UploadDashboardPage";
+import ReviewIdeasPage from "./pages/ReviewIdeasPage";
 import ConfigStudioPage from "./pages/ConfigStudioPage";
 import ExamStudioPage from "./pages/ExamStudioPage";
 import "./theme.css";
@@ -184,6 +185,7 @@ function AppContent() {
       <main className="app-main">
         <Routes>
           <Route path="/" element={<UploadDashboardPage />} />
+          <Route path="/review/:documentId" element={<ReviewIdeasPage />} />
           <Route path="/config/:documentId" element={<ConfigStudioPage />} />
           <Route path="/exam/:examId" element={<ExamStudioPage />} />
         </Routes>

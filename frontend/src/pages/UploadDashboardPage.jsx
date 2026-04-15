@@ -105,7 +105,7 @@ function UploadDashboardPage() {
 
       setMessage({ type: "success", text: response.data.message });
       setTimeout(() => {
-        navigate(`/config/${response.data.document_id}`);
+        navigate(`/review/${response.data.document_id}`);
       }, 700);
     } catch (error) {
       if (error.code === "ECONNABORTED") {
@@ -152,8 +152,9 @@ function UploadDashboardPage() {
           </p>
           <div className="focus-stepper" aria-label="Exam workflow steps">
             <span className="step-chip active">1. Upload</span>
-            <span className="step-chip">2. Configure</span>
-            <span className="step-chip">3. Take exam</span>
+            <span className="step-chip">2. Review</span>
+            <span className="step-chip">3. Configure</span>
+            <span className="step-chip">4. Take exam</span>
           </div>
         </div>
 

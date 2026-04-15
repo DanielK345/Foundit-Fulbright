@@ -12,10 +12,16 @@ function ConfigPage() {
   const [slowNotice, setSlowNotice] = useState(false);
   const [contextLoading, setContextLoading] = useState(true);
   const [contextError, setContextError] = useState(null);
-  const [contextMeta, setContextMeta] = useState(null);   // { filenames, num_sections }
+  const [contextMeta, setContextMeta] = useState(null);
   const [editedContent, setEditedContent] = useState("");
   const [originalContent, setOriginalContent] = useState("");
   const [contextSaved, setContextSaved] = useState(true);
+
+  // Ideas review step
+  const [step, setStep] = useState("config"); // "config" | "extracting" | "review"
+  const [ideas, setIdeas] = useState("");
+  const [ideasError, setIdeasError] = useState(null);
+
   const [config, setConfig] = useState({
     time_limit: 30,
     mcq: 5,
@@ -56,13 +62,14 @@ function ConfigPage() {
     fetchContext();
   }, [documentId]);
 
+  // Step 1: save any edits, then extract ideas
   const handleGenerate = async () => {
-    setLoading(true);
     setError(null);
-    setSlowNotice(false);
-    const slowTimer = setTimeout(() => setSlowNotice(true), 5000);
+    setIdeasError(null);
+    setStep("extracting");
 
     try {
+      // Persist any content edits first
       if (!contextSaved) {
         await axios.put(`${API_URL}/upload/${documentId}/context`, { content: editedContent }, {
           timeout: 30000,
@@ -70,6 +77,33 @@ function ConfigPage() {
         setContextSaved(true);
       }
 
+      const response = await axios.post(`${API_URL}/upload/${documentId}/ideas`, {}, {
+        timeout: 120000,
+      });
+      setIdeas(response.data.ideas);
+      setStep("review");
+    } catch (err) {
+      let msg;
+      if (err.code === "ECONNABORTED") {
+        msg = "Idea extraction timed out. Please try again.";
+      } else if (!err.response) {
+        msg = "Cannot reach the server. Please try again.";
+      } else {
+        msg = err.response?.data?.detail || "Failed to extract ideas. Please try again.";
+      }
+      setIdeasError(msg);
+      setStep("config");
+    }
+  };
+
+  // Step 2: generate exam using the (possibly edited) ideas as focus context
+  const handleConfirmGenerate = async () => {
+    setLoading(true);
+    setError(null);
+    setSlowNotice(false);
+    const slowTimer = setTimeout(() => setSlowNotice(true), 5000);
+
+    try {
       const response = await axios.post(`${API_URL}/generate`, {
         document_id: documentId,
         ...config,
@@ -77,7 +111,7 @@ function ConfigPage() {
         true_false: parseInt(config.true_false),
         short_answer: parseInt(config.short_answer),
         time_limit: parseInt(config.time_limit),
-        focus: config.focus || null,
+        focus: ideas || config.focus || null,
       }, { timeout: 180000 });
 
       navigate(`/exam/${response.data.exam_id}`);
@@ -89,6 +123,7 @@ function ConfigPage() {
       } else {
         setError(err.response?.data?.detail || "Generation failed. Please try again.");
       }
+      setStep("review");
     } finally {
       clearTimeout(slowTimer);
       setLoading(false);
@@ -96,6 +131,7 @@ function ConfigPage() {
     }
   };
 
+  // ── Loading overlay (exam generation in progress) ──────────────────────────
   if (loading) {
     return (
       <div className="config-container">
@@ -115,6 +151,70 @@ function ConfigPage() {
     );
   }
 
+  // ── Extracting ideas overlay ───────────────────────────────────────────────
+  if (step === "extracting") {
+    return (
+      <div className="config-container">
+        <div className="loading-overlay">
+          <div className="spinner"></div>
+          <p>Analyzing your slides...</p>
+          <p style={{ color: "#64748b", fontSize: "0.9rem", marginTop: 8 }}>
+            Gemini is extracting the key concepts and main ideas from your documents.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Review ideas step ──────────────────────────────────────────────────────
+  if (step === "review") {
+    return (
+      <div className="config-container">
+        <div className="ideas-review-header">
+          <h2>Review Key Concepts</h2>
+          <p>
+            Gemini extracted these main ideas from your slides. Edit anything that looks off,
+            then click <strong>Generate Exam</strong> to create questions based on them.
+          </p>
+        </div>
+
+        {error && <div className="status-message error" style={{ marginBottom: 16 }}>{error}</div>}
+
+        <div className="ideas-review-body">
+          <div className="ideas-review-meta">
+            <span>{ideas.length} chars</span>
+            <span>Used as exam focus</span>
+          </div>
+          <textarea
+            className="context-edit-textarea"
+            value={ideas}
+            onChange={(e) => setIdeas(e.target.value)}
+            rows={18}
+            spellCheck={false}
+            placeholder="Main ideas will appear here..."
+          />
+        </div>
+
+        <div className="ideas-review-actions">
+          <button
+            className="btn btn-secondary"
+            onClick={() => { setStep("config"); setError(null); }}
+          >
+            ← Back to Settings
+          </button>
+          <button
+            className="btn btn-primary"
+            onClick={handleConfirmGenerate}
+            disabled={!ideas.trim()}
+          >
+            Generate Exam →
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Config step (default) ──────────────────────────────────────────────────
   return (
     <div className="config-container">
       <h2>Configure Your Exam</h2>
@@ -176,6 +276,7 @@ function ConfigPage() {
         />
       </div>
 
+      {ideasError && <div className="status-message error">{ideasError}</div>}
       {error && <div className="status-message error">{error}</div>}
 
       <section className="context-panel">
@@ -206,7 +307,9 @@ function ConfigPage() {
         )}
 
         {!contextLoading && contextError && (
-          <div className="status-message error">{contextError}</div>
+          documentId === "demo"
+            ? <div className="context-panel-empty">Upload a real document to preview and edit its extracted content here.</div>
+            : <div className="status-message error">{contextError}</div>
         )}
 
         {!contextLoading && !contextError && contextMeta && (
