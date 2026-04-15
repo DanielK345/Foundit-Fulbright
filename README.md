@@ -167,7 +167,7 @@ GEMINI_API_KEY=your-api-key-here
 Start the server:
 
 ```bash
-uvicorn app:app --reload --port 8000
+python -m uvicorn app:app --reload --port 8000
 ```
 
 The API will be available at `http://localhost:8000`. You can verify with:

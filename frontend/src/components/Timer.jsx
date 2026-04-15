@@ -1,16 +1,16 @@
-import { useState, useEffect, useCallback } from "react";
+import { useEffect, useState } from "react";
 
 function Timer({ totalMinutes, onTimeUp }) {
   const [secondsLeft, setSecondsLeft] = useState(totalMinutes * 60);
 
-  const handleTimeUp = useCallback(() => {
-    onTimeUp();
-  }, [onTimeUp]);
+  useEffect(() => {
+    setSecondsLeft(totalMinutes * 60);
+  }, [totalMinutes]);
 
   useEffect(() => {
     if (secondsLeft <= 0) {
-      handleTimeUp();
-      return;
+      onTimeUp();
+      return undefined;
     }
 
     const interval = setInterval(() => {
@@ -18,20 +18,25 @@ function Timer({ totalMinutes, onTimeUp }) {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [secondsLeft, handleTimeUp]);
+  }, [secondsLeft, onTimeUp]);
 
   const minutes = Math.floor(secondsLeft / 60);
   const seconds = secondsLeft % 60;
   const timeStr = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 
-  let className = "timer";
+  let statusClass = "";
   if (secondsLeft < 60) {
-    className += " danger";
+    statusClass = "danger";
   } else if (secondsLeft < 300) {
-    className += " warning";
+    statusClass = "warning";
   }
 
-  return <div className={className}>{timeStr}</div>;
+  return (
+    <div className={`timer-card ${statusClass}`}>
+      <span className="timer-label">Time Remaining</span>
+      <span className="timer-value">{timeStr}</span>
+    </div>
+  );
 }
 
 export default Timer;

@@ -5,7 +5,8 @@
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   background: #f5f7fa;
   color: #333;
 }
@@ -74,9 +75,10 @@ body {
 }
 
 .app-main {
-  max-width: 800px;
+  width: 100%;
+  max-width: 1440px;
   margin: 32px auto;
-  padding: 0 16px;
+  padding: 0 32px;
 }
 
 /* Upload Page */
@@ -136,7 +138,9 @@ body {
   cursor: pointer;
   font-size: 0.9rem;
   color: #64748b;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 
 .toggle-btn:not(:last-child) {

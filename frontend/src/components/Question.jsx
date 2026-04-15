@@ -1,21 +1,48 @@
 import React from "react";
 
-function Question({ question, index, answer, onAnswer }) {
+function typeLabel(type) {
+  if (type === "mcq") return "Multiple Choice Question";
+  if (type === "true_false") return "True / False Question";
+  return "Short Answer Question";
+}
+
+function Question({
+  question,
+  index,
+  answer,
+  onAnswer,
+  isFlagged,
+  onToggleFlag,
+}) {
   const { type, question: questionText, options } = question;
 
   return (
-    <div className="question-card">
-      <div className="question-number">Question {index + 1}</div>
-      <span className={`question-type ${type}`}>
-        {type === "mcq" ? "Multiple Choice" : type === "true_false" ? "True / False" : "Short Answer"}
-      </span>
-      <div className="question-text">{questionText}</div>
+    <section className="exam-question-card">
+      <div className="exam-question-accent" aria-hidden="true" />
+      <div className="exam-question-body">
+        <div className="exam-question-header">
+          <div className="exam-question-meta">
+            <div className="exam-question-index">{index + 1}</div>
+            <div>
+              <h2>{`Question ${index + 1}`}</h2>
+              <p>{typeLabel(type)}</p>
+            </div>
+          </div>
+          <button
+            className={`ghost-flag-button ${isFlagged ? "is-flagged" : ""}`}
+            onClick={onToggleFlag}
+            type="button"
+          >
+            {isFlagged ? "Remove Flag" : "Flag for Review"}
+          </button>
+        </div>
+
+        <p className="exam-question-text">{questionText}</p>
 
       {(type === "mcq" || type === "true_false") && options && (
-        <ul className="options-list">
+        <div className="answer-stack">
           {options.map((option, i) => (
-            <li key={i}>
-              <label className={answer === option ? "selected" : ""}>
+              <label className={`answer-option ${answer === option ? "selected" : ""}`} key={i}>
                 <input
                   type="radio"
                   name={`question-${index}`}
@@ -23,23 +50,29 @@ function Question({ question, index, answer, onAnswer }) {
                   checked={answer === option}
                   onChange={() => onAnswer(option)}
                 />
-                {option}
+                <span className="answer-control" aria-hidden="true" />
+                <span className="answer-copy">
+                  <strong>{option}</strong>
+                </span>
               </label>
-            </li>
           ))}
-        </ul>
+        </div>
       )}
 
       {type === "short_answer" && (
-        <input
-          className="short-answer-input"
-          type="text"
-          placeholder="Type your answer..."
-          value={answer || ""}
-          onChange={(e) => onAnswer(e.target.value)}
-        />
+          <label className="short-answer-shell">
+            <span>Your answer</span>
+            <textarea
+              className="short-answer-input"
+              placeholder="Type the concept, principle, or explanation you want to submit."
+              value={answer || ""}
+              onChange={(e) => onAnswer(e.target.value)}
+              rows="6"
+            />
+          </label>
       )}
-    </div>
+      </div>
+    </section>
   );
 }
 
