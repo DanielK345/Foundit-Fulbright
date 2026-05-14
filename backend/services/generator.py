@@ -28,9 +28,10 @@ GUIDELINES:
 - Coding questions MUST include a code_snippet field with actual runnable code relevant to the material
 - Coding questions should ask about output, behavior, bugs, or what a function returns
 - Coding questions can be MCQ-style (with options A/B/C/D) OR short-answer style (options: null)
+- If the output is non-deterministic or depends on runtime conditions, prefer MCQ-style with options that describe the possible behaviors
 - Cover a range of topics from across the content
 - Do not generate questions if the content is insufficient — skip that type
-
+{feedback_section}
 OUTPUT (strict JSON only, no extra text):
 {{
   "questions": [
@@ -134,11 +135,18 @@ def generate_questions(
     difficulty: str,
     coding: int = 0,
     focus: str = None,
+    past_feedback: list[str] = None,
     temperature: float = 0.7,
 ) -> list[dict]:
     """Generate exam questions using Gemini with full document context."""
     context = build_context_block(chunks)
     focus_line = f"Focus area: {focus}" if focus else ""
+
+    if past_feedback:
+        feedback_lines = "\n".join(f"- {fb}" for fb in past_feedback[-5:])
+        feedback_section = f"\nPAST STUDENT FEEDBACK (apply these improvements):\n{feedback_lines}\n"
+    else:
+        feedback_section = ""
 
     prompt = PROMPT_TEMPLATE.format(
         context=context,
@@ -148,6 +156,7 @@ def generate_questions(
         coding=coding,
         difficulty=difficulty,
         focus_line=focus_line,
+        feedback_section=feedback_section,
     )
 
     model = genai.GenerativeModel(

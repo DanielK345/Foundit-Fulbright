@@ -66,12 +66,25 @@ function Question({
         </div>
       )}
 
-      {(type === "short_answer" || isCodingShort) && (
+      {type === "short_answer" && (
           <label className="short-answer-shell">
             <span>Your answer</span>
             <textarea
               className="short-answer-input"
-              placeholder="Type your answer..."
+              placeholder="Type the concept, principle, or explanation you want to submit."
+              value={answer || ""}
+              onChange={(e) => onAnswer(e.target.value)}
+              rows="4"
+            />
+          </label>
+      )}
+
+      {isCodingShort && (
+          <label className="short-answer-shell">
+            <span>Your answer</span>
+            <textarea
+              className="short-answer-input"
+              placeholder="Describe the output or behavior — e.g. 'Less than 200000, varies due to race condition' or a specific value with a brief reason."
               value={answer || ""}
               onChange={(e) => onAnswer(e.target.value)}
               rows="4"
