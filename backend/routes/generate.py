@@ -1,6 +1,6 @@
 import uuid
 from fastapi import APIRouter, HTTPException
-from models.schema import ExamConfig, ExamResponse, Question, GradeRequest, GradeResponse
+from models.schema import ExamConfig, ExamResponse, Question, GradeRequest, GradeResponse, FeedbackRequest
 from services.generator import generate_questions
 from services.validator import validate_questions
 from services.grader import grade_exam
@@ -10,7 +10,7 @@ router = APIRouter()
 
 @router.post("/generate", response_model=ExamResponse)
 async def generate_exam(config: ExamConfig):
-    from app import documents_store, exams_store
+    from app import documents_store, exams_store, exam_doc_store, feedback_store
 
     # Validate document exists
     if config.document_id not in documents_store:
@@ -53,6 +53,8 @@ async def generate_exam(config: ExamConfig):
         if need_mcq + need_tf + need_sa + need_coding == 0:
             break
 
+        past_feedback = feedback_store.get(config.document_id, [])
+
         try:
             questions = generate_questions(
                 chunks=all_chunks,
@@ -62,6 +64,7 @@ async def generate_exam(config: ExamConfig):
                 coding=need_coding,
                 difficulty=config.difficulty,
                 focus=config.focus,
+                past_feedback=past_feedback,
                 temperature=temperature,
             )
         except Exception as e:
@@ -103,6 +106,7 @@ async def generate_exam(config: ExamConfig):
     )
 
     exams_store[exam_id] = exam_data
+    exam_doc_store[exam_id] = config.document_id
 
     return exam_data
 
@@ -115,6 +119,21 @@ async def get_exam(exam_id: str):
         raise HTTPException(status_code=404, detail="Exam not found.")
 
     return exams_store[exam_id]
+
+
+@router.post("/feedback")
+async def submit_feedback(request: FeedbackRequest):
+    from app import exams_store, exam_doc_store, feedback_store
+
+    if request.exam_id not in exam_doc_store:
+        raise HTTPException(status_code=404, detail="Exam not found.")
+
+    doc_id = exam_doc_store[request.exam_id]
+    if doc_id not in feedback_store:
+        feedback_store[doc_id] = []
+    feedback_store[doc_id].append(request.feedback.strip())
+
+    return {"message": "Feedback saved. It will be applied to the next exam generated from this document."}
 
 
 @router.post("/grade", response_model=GradeResponse)

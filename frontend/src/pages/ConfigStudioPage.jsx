@@ -16,6 +16,7 @@ function ConfigStudioPage() {
     mcq: 5,
     true_false: 3,
     short_answer: 2,
+    coding: 2,
     difficulty: "medium",
     focus: "",
   });
@@ -24,8 +25,9 @@ function ConfigStudioPage() {
     () =>
       Number(config.mcq) +
       Number(config.true_false) +
-      Number(config.short_answer),
-    [config.mcq, config.true_false, config.short_answer],
+      Number(config.short_answer) +
+      Number(config.coding),
+    [config.mcq, config.true_false, config.short_answer, config.coding],
   );
 
   const handleChange = (field, value) => {
@@ -53,6 +55,7 @@ function ConfigStudioPage() {
         mcq: parseInt(config.mcq, 10),
         true_false: parseInt(config.true_false, 10),
         short_answer: parseInt(config.short_answer, 10),
+        coding: parseInt(config.coding, 10),
         time_limit: parseInt(config.time_limit, 10),
         focus: config.focus || null,
       };
@@ -180,7 +183,7 @@ function ConfigStudioPage() {
             />
           </label>
 
-          <label className="config-field config-field-full">
+          <label className="config-field">
             <span>Short Answer</span>
             <input
               max="10"
@@ -190,6 +193,17 @@ function ConfigStudioPage() {
               }
               type="number"
               value={config.short_answer}
+            />
+          </label>
+
+          <label className="config-field">
+            <span>Coding</span>
+            <input
+              max="10"
+              min="0"
+              onChange={(event) => handleChange("coding", event.target.value)}
+              type="number"
+              value={config.coding}
             />
           </label>
 
@@ -231,6 +245,10 @@ function ConfigStudioPage() {
           <div className="breakdown-card">
             <strong>{config.short_answer}</strong>
             <span>Short Answer</span>
+          </div>
+          <div className="breakdown-card">
+            <strong>{config.coding}</strong>
+            <span>Coding</span>
           </div>
         </div>
 

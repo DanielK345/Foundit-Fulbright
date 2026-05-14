@@ -51,6 +51,11 @@ class IdeasResponse(BaseModel):
     ideas: str
 
 
+class FeedbackRequest(BaseModel):
+    exam_id: str
+    feedback: str
+
+
 class GradeRequest(BaseModel):
     exam_id: str
     answers: dict[str, str]  # question index (str) -> user answer
