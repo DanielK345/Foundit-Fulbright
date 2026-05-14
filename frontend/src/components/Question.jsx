@@ -37,6 +37,16 @@ function Question({
           </button>
         </div>
 
+        {(question.unit_title || question.concept || question.learning_objective || question.bloom_level || question.document_type) && (
+          <div className="question-context-strip">
+            {question.unit_title && <span>{question.unit_title}</span>}
+            {question.concept && <span>{question.concept}</span>}
+            {question.learning_objective && <span>{question.learning_objective}</span>}
+            {question.bloom_level && <span>{question.bloom_level}</span>}
+            {question.document_type && <span>{question.document_type}</span>}
+          </div>
+        )}
+
         <p className="exam-question-text">{questionText}</p>
 
       {(type === "mcq" || type === "true_false") && options && (

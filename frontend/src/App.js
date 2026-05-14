@@ -12,7 +12,7 @@ import ConfigStudioPage from "./pages/ConfigStudioPage";
 import ExamStudioPage from "./pages/ExamStudioPage";
 import "./theme.css";
 
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:8000";
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:8010";
 
 function HeaderIcon({ children }) {
   return (

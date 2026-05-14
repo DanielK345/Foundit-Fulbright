@@ -2,8 +2,8 @@ import React, { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:8000";
-const ALLOWED_EXTENSIONS = ["pdf", "pptx"];
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:8010";
+const ALLOWED_EXTENSIONS = ["pdf", "pptx", "docx", "txt", "md"];
 
 function formatSize(size) {
   if (size >= 1024 * 1024) {
@@ -43,7 +43,7 @@ function UploadDashboardPage() {
     if (valid.length === 0) {
       setMessage({
         type: "error",
-        text: "Only PDF and PPTX files are supported for exam generation.",
+            text: "Supported files: PDF, PPTX, DOCX, TXT, and MD.",
       });
       return;
     }
@@ -59,7 +59,7 @@ function UploadDashboardPage() {
     if (rejected > 0) {
       setMessage({
         type: "error",
-        text: `${rejected} file(s) were skipped because they are not PDF or PPTX documents.`,
+            text: `${rejected} file(s) were skipped because they are not supported study materials.`,
       });
     } else {
       setMessage(null);
@@ -100,7 +100,7 @@ function UploadDashboardPage() {
     try {
       const response = await axios.post(`${API_URL}/upload`, formData, {
         headers: { "Content-Type": "multipart/form-data" },
-        timeout: 120000,
+        timeout: 300000,
       });
 
       setMessage({ type: "success", text: response.data.message });
@@ -111,7 +111,7 @@ function UploadDashboardPage() {
       if (error.code === "ECONNABORTED") {
         setMessage({
           type: "error",
-          text: "Upload timed out while the backend was waking up. Please try again.",
+          text: "Upload timed out while parsing files. Try fewer files at once or restart the backend.",
         });
       } else if (!error.response) {
         setMessage({
@@ -147,8 +147,8 @@ function UploadDashboardPage() {
           <p className="eyebrow">Exam Builder</p>
           <h1>Build your exam from source files</h1>
           <p className="focus-subcopy">
-            Upload PDF or PPTX materials, then continue to exam setup. Keep the
-            source focused for better generation quality.
+            Upload slides, readings, homework, tests, notes, or study guides,
+            then continue to exam setup.
           </p>
           <div className="focus-stepper" aria-label="Exam workflow steps">
             <span className="step-chip active">1. Upload</span>
@@ -178,7 +178,7 @@ function UploadDashboardPage() {
             tabIndex={0}
           >
             <input
-              accept=".pdf,.pptx"
+              accept=".pdf,.pptx,.docx,.txt,.md"
               multiple
               onChange={(event) => {
                 if (event.target.files.length > 0) addFiles(event.target.files);
@@ -188,7 +188,7 @@ function UploadDashboardPage() {
               type="file"
             />
             <input
-              accept=".pdf,.pptx"
+              accept=".pdf,.pptx,.docx,.txt,.md"
               onChange={(event) => {
                 if (event.target.files.length > 0) addFiles(event.target.files);
                 event.target.value = "";
@@ -202,7 +202,7 @@ function UploadDashboardPage() {
             <div className="upload-dropzone-icon">+</div>
             <h3>Drag and drop your study material</h3>
             <p>{`Click to ${folderMode ? "select a folder" : "browse files"} or drop documents here.`}</p>
-            <span>Accepted types: PDF, PPTX.</span>
+            <span>Accepted types: PDF, PPTX, DOCX, TXT, MD.</span>
           </div>
 
           <div className="focus-controls-row">
@@ -303,7 +303,7 @@ function UploadDashboardPage() {
       <details className="focus-accordion">
         <summary>How it works</summary>
         <ol className="workflow-list">
-          <li>Upload one or more PDF or PPTX resources.</li>
+          <li>Upload slides, readings, homework, tests, notes, or study guides.</li>
           <li>Adjust exam structure and difficulty.</li>
           <li>Run the exam and review grading insights.</li>
         </ol>

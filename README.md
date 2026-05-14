@@ -1,183 +1,74 @@
-# Exam Generator
+# Adaptive Exam Practice Generator
 
-A full-stack web application that generates high-quality exam questions from uploaded lecture materials (PDF/PPTX) using Retrieval-Augmented Generation (RAG). Questions are strictly grounded in the uploaded content to minimize hallucination.
+An AI-assisted study system for students. The app turns course materials into grounded practice exams, grades responses, diagnoses weak concepts, and generates follow-up practice.
 
-## Pipeline Overview
+Unlike a generic quiz prompt, this project builds a structured course map first: uploaded files are parsed, classified, filtered, grouped into units and concepts, converted into an exam blueprint, and then used as evidence for question generation.
 
-### End-to-End Flow
+## Key Features
 
-```mermaid
-flowchart TB
-    subgraph Frontend
-        A["UploadPage\n(PDF / PPTX)"] -->|POST /upload| B["ConfigPage\n(exam settings)"]
-        B -->|POST /generate| C["ExamPage\n(take exam)"]
-        C -->|POST /grade| D["Results\n(score + feedback)"]
-    end
-
-    subgraph Backend ["Backend — RAG Pipeline"]
-        direction TB
-        U["Upload Route"] --> P["Parser\n(pdfplumber / python-pptx)"]
-        P -->|"list of pages\n{source, content}"| CH["Chunker\n(token-based, 400 tok, 50 overlap)"]
-        CH -->|"list of chunks\n{chunk_id, source, content}"| EM["Embedder\n(gemini-embedding-001)"]
-        EM -->|"FAISS IndexFlatIP\n(cosine similarity)"| RE["Retriever\n(top-15 chunks)"]
-        RE -->|"retrieved context"| GEN["Generator\n(gemini-2.0-flash)"]
-        GEN -->|"raw questions JSON"| VAL["Validator\n(structure + grounding + dedup)"]
-        VAL -->|"rejected?"| RETRY{"Retry?\n(up to 2x,\nlower temp)"}
-        RETRY -->|yes| GEN
-        RETRY -->|no| EXAM["Exam stored\nin memory"]
-    end
-
-    subgraph Grading ["Grading Pipeline"]
-        direction TB
-        GR_IN["Student answers"] --> MCQ_TF["MCQ / True-False\n(exact match)"]
-        GR_IN --> SA["Short Answer"]
-        SA --> S1["Stage 1: Embed + Cosine Similarity"]
-        S1 -->|"> 0.85"| CORRECT["Correct"]
-        S1 -->|"< 0.50"| WRONG["Incorrect"]
-        S1 -->|"0.50 – 0.85"| S2["Stage 2: LLM Fallback\n(gemini-2.0-flash)"]
-        S2 --> VERDICT["Correct / Incorrect\n+ feedback"]
-        MCQ_TF --> SCORE["Final Score"]
-        CORRECT --> SCORE
-        WRONG --> SCORE
-        VERDICT --> SCORE
-    end
-
-    A -->|files| U
-    B -->|ExamConfig| RE
-    C -->|answers| GR_IN
-    EXAM --> C
-    SCORE --> D
-```
-
-### Data Flow Through Services
-
-```mermaid
-flowchart LR
-    PDF["PDF / PPTX\nfiles"] --> parser["parser.py\nparse_file()"]
-    parser -->|"[{source, content}]"| chunker["chunker.py\nchunk_pages()"]
-    chunker -->|"[{chunk_id, source, content}]"| embedder["embedder.py\nbuild_faiss_index()"]
-    embedder -->|"FAISS index + chunks"| retriever["retriever.py\nretrieve_chunks()"]
-    retriever -->|"top-K chunks + scores"| generator["generator.py\ngenerate_questions()"]
-    generator -->|"raw questions"| validator["validator.py\nvalidate_questions()"]
-    validator -->|"valid questions"| grader["grader.py\ngrade_exam()"]
-    grader -->|"score + details"| result["GradeResponse"]
-```
-
-### Short Answer Grading Detail
-
-```mermaid
-flowchart TD
-    INPUT["Student answer + Reference answer"] --> EMBED["Embed both\n(gemini-embedding-001)"]
-    EMBED --> COS["Cosine Similarity"]
-    COS --> HIGH{"sim > 0.85?"}
-    HIGH -->|yes| C["CORRECT\n(no LLM call)"]
-    HIGH -->|no| LOW{"sim < 0.50?"}
-    LOW -->|yes| W["INCORRECT\n(no LLM call)"]
-    LOW -->|no| LLM["LLM Fallback\n(gemini-2.0-flash\ntemp=0.1, JSON mode)"]
-    LLM --> V["CORRECT / INCORRECT\n+ feedback"]
-
-    style C fill:#dcfce7,stroke:#22c55e,color:#166534
-    style W fill:#fef2f2,stroke:#ef4444,color:#991b1b
-    style V fill:#dbeafe,stroke:#2563eb,color:#1e40af
-```
-
-## Features
-
-- **File Upload** — Accepts PDF and PPTX files; extracts text at page/slide level
-- **RAG Pipeline** — Chunks documents, embeds with Gemini, stores in FAISS, retrieves relevant context before generating questions
-- **Question Generation** — Produces MCQ, True/False, and Short Answer questions using a strict prompt template with anti-hallucination constraints
-- **Validation & Regeneration** — Validates every generated question against source context; retries with lower temperature on failure (up to 2 retries)
-- **Interactive Exam UI** — Countdown timer, question navigation, and submit functionality
-- **Hybrid Grading** — MCQ/True-False graded by exact match; Short answers graded via a two-stage pipeline (cosine similarity fast filter + LLM fallback)
-- **Results Review** — Score, percentage, correct answers, explanations, and grading feedback
+- Upload mixed study materials: `pdf`, `pptx`, `docx`, `txt`, and `md`
+- Classify files as slides, homework, readings, notes, previous tests, or unknown
+- Extract concepts and source evidence from all materials
+- Build a course map with units, learning objectives, priorities, and ignored logistics
+- Generate an exam blueprint before writing questions
+- Use local Ollama embeddings with FAISS retrieval
+- Generate grounded MCQ, true/false, and short-answer questions from learning objectives
+- Reject generic or unsupported questions with a quality judge
+- Tag questions by unit, concept, learning objective, source type, difficulty, and Bloom level
+- Grade answers and diagnose weak concepts
+- Generate adaptive practice from weak areas
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|------------|
-| Backend | Python, FastAPI |
-| LLM | Google Gemini (`gemini-2.0-flash`) |
-| Embeddings | Gemini `gemini-embedding-001` |
-| Vector DB | FAISS (in-memory, cosine similarity) |
-| File Parsing | pdfplumber (PDF), python-pptx (PPTX) |
-| Frontend | React, React Router, Axios |
+- Backend: FastAPI, Pydantic, FAISS, pdfplumber, python-pptx, python-docx, Tesseract OCR
+- AI: Gemini for generation/vision, Ollama for local embeddings and optional local text generation
+- Frontend: React, React Router, Axios
 
-## Project Structure
+## Installation
 
-```
-backend/
-  app.py                  # FastAPI app entry point
-  .env                    # GEMINI_API_KEY (not committed)
-  requirements.txt
-  routes/
-    upload.py             # POST /upload
-    generate.py           # POST /generate, GET /exam/:id, POST /grade
-  services/
-    parser.py             # PDF + PPTX text extraction
-    chunker.py            # Token-based chunking with overlap
-    embedder.py           # Gemini embeddings + FAISS index
-    retriever.py          # FAISS similarity search
-    generator.py          # Question generation via Gemini
-    validator.py          # Question validation (grounding, duplicates)
-    grader.py             # Hybrid grading pipeline
-  models/
-    schema.py             # Pydantic request/response models
-
-frontend/
-  src/
-    App.js                # Router
-    App.css               # Styles
-    pages/
-      UploadPage.jsx      # File upload with drag-and-drop
-      ConfigPage.jsx      # Exam configuration form
-      ExamPage.jsx        # Exam taking, grading, results
-    components/
-      Timer.jsx           # Countdown timer
-      Question.jsx        # Question renderer (MCQ, T/F, Short Answer)
-```
-
-## Prerequisites
-
-- Python 3.10+
-- Node.js 16+
-- A Google Gemini API key — get one at https://aistudio.google.com/apikey
-
-## Setup
-
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/DanielK345/Exam-generator.git
-cd Exam-generator
-```
-
-### 2. Backend
+### Backend
 
 ```bash
 cd backend
 pip install -r requirements.txt
 ```
 
-Create a `.env` file (or edit the existing one) with your API key:
+Create `backend/.env`:
 
-```
-GEMINI_API_KEY=your-api-key-here
+```env
+GEMINI_API_KEY=your_gemini_key
+AI_TEXT_PROVIDER=gemini
+AI_EMBED_PROVIDER=ollama
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_EMBED_MODEL=bge-m3
+OLLAMA_TEXT_MODEL=llama3.1:8b
+OLLAMA_EXTRACT_MODEL=llama3.1:8b
+OLLAMA_QUESTION_MODEL=llama3.1:8b
+OLLAMA_JUDGE_MODEL=llama3.1:8b
+OLLAMA_NUM_CTX=4096
+OLLAMA_KEEP_ALIVE=10m
+ENABLE_LOCAL_COURSE_MAP_REFINEMENT=false
+GEMINI_MODEL=gemini-2.0-flash
+CORS_ORIGINS=http://localhost:3000
 ```
 
-Start the server:
+Install local Ollama models:
 
 ```bash
-python -m uvicorn app:app --reload --port 8000
+ollama pull bge-m3
+ollama pull qwen3:14b
 ```
 
-The API will be available at `http://localhost:8000`. You can verify with:
+For a 12GB RTX 3080, `qwen3:14b` is the stronger local text model to try first. If it is too slow, use `llama3.1:8b` for the text/extract/judge models and keep `bge-m3` for embeddings.
+
+Run the API:
 
 ```bash
-curl http://localhost:8000/health
-# {"status":"ok"}
+cd backend
+python -m uvicorn app:app --host 0.0.0.0 --reload --port 8010
 ```
 
-### 3. Frontend
+### Frontend
 
 ```bash
 cd frontend
@@ -185,39 +76,39 @@ npm install
 npm start
 ```
 
-The app will open at `http://localhost:3000`.
+Open `http://localhost:3000`.
 
 ## Usage
 
-1. **Upload** — Open the app and upload a PDF or PPTX file
-2. **Configure** — Set the number of MCQ, True/False, and Short Answer questions, difficulty level, time limit, and optionally a focus area
-3. **Generate** — Click "Generate Exam" and wait for the RAG pipeline to process
-4. **Take the Exam** — Answer questions before the timer runs out
-5. **Submit** — Get your score, correct answers, explanations, and grading feedback
+1. Upload slides, homework, readings, notes, or previous tests.
+2. Review the course map: units, important concepts, learning objectives, and ignored material.
+3. Configure question counts, difficulty, Bloom levels, study goal, question style, and source mix.
+4. Take the generated practice exam.
+5. Review score, evidence, explanations, and weak concepts.
+6. Generate weak-area practice.
 
-## API Endpoints
+## Testing
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/health` | Health check |
-| `POST` | `/upload` | Upload PDF/PPTX, returns `document_id` |
-| `POST` | `/generate` | Generate exam from document + config |
-| `GET` | `/exam/{exam_id}` | Retrieve a generated exam |
-| `POST` | `/grade` | Grade an exam submission |
+Backend:
 
-## Short Answer Grading
+```bash
+cd backend
+python -m pytest ../tests -v
+```
 
-Short answers use a hybrid two-stage pipeline to balance accuracy and cost:
+Frontend:
 
-1. **Stage 1 — Semantic Similarity (fast filter):**
-   Embeds both student and reference answers, computes cosine similarity.
-   - `> 0.85` — marked correct (no LLM call)
-   - `< 0.50` — marked incorrect (no LLM call)
-   - `0.50–0.85` — inconclusive, sent to Stage 2
+```bash
+cd frontend
+npm test
+```
 
-2. **Stage 2 — LLM Grading (fallback):**
-   Calls Gemini with a strict grading prompt. Only used when similarity is inconclusive.
+## Documentation
 
-## License
-
-MIT
+- [Architecture](docs/ARCHITECTURE.md)
+- [API Reference](docs/API.md)
+- [Test Cases](docs/TEST_CASES.md)
+- [NLP Methods](docs/NLP_METHODS.md)
+- [Evaluation](docs/EVALUATION.md)
+- [Demo Script](docs/DEMO_SCRIPT.md)
+- [Limitations](docs/LIMITATIONS.md)

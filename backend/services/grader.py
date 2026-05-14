@@ -1,10 +1,7 @@
-import os
 import json
 import numpy as np
-import google.generativeai as genai
 from services.embedder import embed_query
-
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+from services.ai_provider import generate_json
 
 # Stage 2 LLM prompt — used ONLY when similarity is inconclusive
 LLM_GRADING_PROMPT = """You are a strict exam grader.
@@ -53,16 +50,7 @@ def _llm_grade(question: str, reference: str, student: str) -> dict:
         student=student,
     )
 
-    model = genai.GenerativeModel(
-        "gemini-2.0-flash",
-        generation_config=genai.GenerationConfig(
-            temperature=0.1,
-            response_mime_type="application/json",
-        ),
-    )
-
-    response = model.generate_content(prompt)
-    parsed = json.loads(response.text.strip())
+    parsed = generate_json(prompt, temperature=0.1)
     return {
         "is_correct": parsed.get("score", 0) == 1,
         "feedback": parsed.get("reason", ""),
@@ -103,6 +91,7 @@ def grade_exam(questions: list[dict], answers: dict[str, str]) -> dict:
     score = 0
     gradable = 0
     details = []
+    concept_stats = {}
 
     for i, q in enumerate(questions):
         user_answer = answers.get(str(i), "")
@@ -110,6 +99,12 @@ def grade_exam(questions: list[dict], answers: dict[str, str]) -> dict:
         correct_answer = q.get("answer", "")
         is_correct = None
         feedback = ""
+        concept_id = q.get("concept_id", "")
+        concept = q.get("concept", "")
+        unit_id = q.get("unit_id", "")
+        unit_title = q.get("unit_title", "")
+        learning_objective = q.get("learning_objective", "")
+        diagnosis = ""
 
         if q_type == "mcq":
             gradable += 1
@@ -142,6 +137,27 @@ def grade_exam(questions: list[dict], answers: dict[str, str]) -> dict:
             feedback = result["feedback"]
             if is_correct:
                 score += 1
+            elif user_answer:
+                diagnosis = f"Review {concept or 'this concept'} and compare your answer with the source evidence."
+
+        if concept_id or concept:
+            key = concept_id or concept
+            if key not in concept_stats:
+                concept_stats[key] = {
+                    "concept_id": concept_id,
+                    "concept": concept or concept_id,
+                    "total": 0,
+                    "missed": 0,
+                    "recommended_sources": set(),
+                    "unit_id": unit_id,
+                    "unit_title": unit_title,
+                    "learning_objective": learning_objective,
+                }
+            concept_stats[key]["total"] += 1
+            if is_correct is False:
+                concept_stats[key]["missed"] += 1
+                if q.get("source"):
+                    concept_stats[key]["recommended_sources"].add(q.get("source"))
 
         details.append({
             "question_index": i,
@@ -153,7 +169,28 @@ def grade_exam(questions: list[dict], answers: dict[str, str]) -> dict:
             "source": q.get("source", ""),
             "is_correct": is_correct,
             "feedback": feedback,
+            "concept_id": concept_id,
+            "concept": concept,
+            "unit_id": unit_id,
+            "unit_title": unit_title,
+            "learning_objective": learning_objective,
+            "evidence": q.get("evidence", ""),
+            "bloom_level": q.get("bloom_level", ""),
+            "diagnosis": diagnosis,
         })
+
+    concept_breakdown = []
+    weak_concepts = []
+    for item in concept_stats.values():
+        item["recommended_sources"] = sorted(item["recommended_sources"])
+        accuracy = round(((item["total"] - item["missed"]) / item["total"]) * 100, 1) if item["total"] else 0
+        breakdown = {**item, "accuracy": accuracy}
+        concept_breakdown.append(breakdown)
+        if item["missed"] > 0:
+            weak_concepts.append({
+                **item,
+                "diagnosis": f"You missed {item['missed']} of {item['total']} question(s) about {item['concept']}.",
+            })
 
     return {
         "score": score,
@@ -161,4 +198,6 @@ def grade_exam(questions: list[dict], answers: dict[str, str]) -> dict:
         "total": len(questions),
         "percentage": round((score / gradable * 100), 1) if gradable > 0 else 0,
         "details": details,
+        "weak_concepts": weak_concepts,
+        "concept_breakdown": concept_breakdown,
     }

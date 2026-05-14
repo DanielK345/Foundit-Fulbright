@@ -4,7 +4,7 @@ import axios from "axios";
 import Timer from "../components/Timer";
 import Question from "../components/Question";
 
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:8000";
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:8010";
 
 function ExamPage() {
   const { examId } = useParams();

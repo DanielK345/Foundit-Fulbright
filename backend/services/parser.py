@@ -3,6 +3,7 @@ import os
 
 import pdfplumber
 import pypdfium2 as pdfium
+from docx import Document
 from PIL import Image
 from pptx import Presentation
 
@@ -13,6 +14,7 @@ except ImportError:
 
 try:
     import google.generativeai as genai
+
     _GEMINI_KEY = os.getenv("GEMINI_API_KEY")
     if _GEMINI_KEY:
         genai.configure(api_key=_GEMINI_KEY)
@@ -46,7 +48,9 @@ def _gemini_extract_image(image: Image.Image, raw_text: str = "") -> str:
     model = genai.GenerativeModel("gemini-2.0-flash")
     parts = []
     if raw_text.strip():
-        parts.append(f"Raw text found on this page (may be incomplete):\n{raw_text}\n\n")
+        parts.append(
+            f"Raw text found on this page (may be incomplete):\n{raw_text}\n\n"
+        )
     parts.append(_resize_for_gemini(image))
     parts.append(EXTRACTION_PROMPT)
     response = model.generate_content(parts)
@@ -68,6 +72,7 @@ def _gemini_extract_slide(text_blocks: list[str], images: list[Image.Image]) -> 
 
 # ── fallback helpers (no Gemini) ────────────────────────────────────────────
 
+
 def _ocr_available() -> bool:
     if pytesseract is None:
         return False
@@ -78,18 +83,92 @@ def _ocr_available() -> bool:
         return False
 
 
+import re
+
+
 def _clean_text_blocks(blocks: list[str]) -> list[str]:
     cleaned, seen = [], set()
     for block in blocks:
         text = block.strip()
         if not text:
             continue
+
+        # Heuristic to remove noisy short lines like isolated slide numbers or repetitive headers
+        lines = text.split("\n")
+        good_lines = []
+        for line in lines:
+            line_stripped = line.strip()
+            # Skip empty lines, lines with just a number, or very short repetitive words
+            if not line_stripped or re.fullmatch(r"\d+", line_stripped):
+                continue
+            if len(line_stripped) < 4 and not re.search(r"[A-Za-z]{2}", line_stripped):
+                continue
+            good_lines.append(line_stripped)
+
+        text = "\n".join(good_lines)
+        if not text:
+            continue
+
         normalized = " ".join(text.split())
         if normalized in seen:
             continue
         seen.add(normalized)
         cleaned.append(text)
     return cleaned
+
+
+def _quality_for_text(text: str, method: str = "text") -> str:
+    words = len(text.split())
+    if words >= 80:
+        return "high"
+    if words >= 25 or method in {"vision", "gemini", "text+ocr"}:
+        return "medium"
+    return "low"
+
+
+def infer_document_type(filename: str, sections: list[dict]) -> str:
+    name = filename.lower()
+    sample = " ".join(
+        section.get("content", "")[:1000] for section in sections[:4]
+    ).lower()
+    text = f"{name} {sample}"
+    if any(
+        term in text for term in ["homework", "assignment", "problem set", "exercise"]
+    ):
+        return "homework"
+    if any(
+        term in text
+        for term in ["quiz", "midterm", "final exam", "practice test", "test"]
+    ):
+        return "previous_test"
+    if any(term in text for term in ["lecture", "slide", "ppt", "chapter"]):
+        return "slides"
+    if any(term in text for term in ["reading", "paper", "article", "textbook"]):
+        return "reading"
+    if any(term in text for term in ["note", "summary", "study guide"]):
+        return "notes"
+    if filename.lower().endswith(".pptx"):
+        return "slides"
+    return "unknown"
+
+
+def _section(
+    source: str,
+    content: str,
+    extraction_method: str,
+    title: str = "",
+    raw_text: str = "",
+) -> dict:
+    return {
+        "section_id": source,
+        "source": source,
+        "title": title,
+        "raw_text": raw_text or content,
+        "content": content,
+        "extraction_method": extraction_method,
+        "content_quality": _quality_for_text(content, extraction_method),
+        "needs_review": _quality_for_text(content, extraction_method) == "low",
+    }
 
 
 def _ocr_image(image: Image.Image) -> str:
@@ -108,6 +187,7 @@ def _render_pdf_page(page: pdfium.PdfPage, scale: float = 2.0) -> Image.Image:
 
 
 # ── main parsers ─────────────────────────────────────────────────────────────
+
 
 def parse_pdf(file_path: str) -> list[dict]:
     """Extract text from each PDF page.
@@ -153,11 +233,14 @@ def parse_pdf(file_path: str) -> list[dict]:
                 extraction_method = "text" if raw_text else "ocr"
 
             if content:
-                pages.append({
-                    "source": f"page_{i + 1}",
-                    "content": content,
-                    "extraction_method": extraction_method,
-                })
+                pages.append(
+                    _section(
+                        source=f"page_{i + 1}",
+                        content=content,
+                        extraction_method=extraction_method,
+                        raw_text=raw_text,
+                    )
+                )
 
     return pages
 
@@ -228,19 +311,104 @@ def parse_pptx(file_path: str) -> list[dict]:
             content_blocks = _clean_text_blocks(text_blocks)
             content = "\n\n".join(content_blocks)
             has_text = any(not b.startswith("[Image OCR]") for b in content_blocks)
-            extraction_method = "text+ocr" if has_text and has_ocr else ("ocr" if has_ocr else "text")
+            extraction_method = (
+                "text+ocr" if has_text and has_ocr else ("ocr" if has_ocr else "text")
+            )
 
         for img in embedded_images:
             img.close()
 
         if content:
-            slides.append({
-                "source": f"slide_{i + 1}",
-                "content": content,
-                "extraction_method": extraction_method,
-            })
+            title = text_blocks[0] if text_blocks else ""
+            slides.append(
+                _section(
+                    source=f"slide_{i + 1}",
+                    content=content,
+                    extraction_method=extraction_method,
+                    title=title[:120],
+                    raw_text="\n".join(text_blocks),
+                )
+            )
 
     return slides
+
+
+def parse_docx(file_path: str) -> list[dict]:
+    """Extract headings, paragraphs, and tables from a DOCX file."""
+    doc = Document(file_path)
+    sections = []
+    current_title = "Document"
+    current_blocks = []
+
+    def emit_section():
+        nonlocal current_blocks
+        content = "\n".join(_clean_text_blocks(current_blocks)).strip()
+        if content:
+            sections.append(
+                _section(
+                    source=f"section_{len(sections) + 1}",
+                    title=current_title,
+                    content=content,
+                    extraction_method="text",
+                )
+            )
+        current_blocks = []
+
+    for paragraph in doc.paragraphs:
+        text = paragraph.text.strip()
+        if not text:
+            continue
+        style = (paragraph.style.name or "").lower()
+        if "heading" in style and current_blocks:
+            emit_section()
+            current_title = text
+        else:
+            current_blocks.append(text)
+
+    for table in doc.tables:
+        rows = []
+        for row in table.rows:
+            cells = [" ".join(cell.text.split()) for cell in row.cells]
+            rows.append(" | ".join(cells))
+        if rows:
+            current_blocks.append("[Table]\n" + "\n".join(rows))
+
+    emit_section()
+    return sections
+
+
+def parse_text_file(file_path: str) -> list[dict]:
+    """Parse TXT/MD files and split them into lightweight sections."""
+    with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+        text = f.read()
+
+    blocks = []
+    current = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        starts_heading = stripped.startswith("#") or stripped.endswith(":")
+        if starts_heading and current:
+            blocks.append("\n".join(current))
+            current = [stripped]
+        else:
+            current.append(line)
+    if current:
+        blocks.append("\n".join(current))
+
+    sections = []
+    for block in blocks:
+        content = block.strip()
+        if content:
+            first_line = content.splitlines()[0].strip("# ").strip()
+            sections.append(
+                _section(
+                    source=f"section_{len(sections) + 1}",
+                    title=first_line[:120],
+                    content=content,
+                    extraction_method="text",
+                )
+            )
+    return sections
 
 
 def parse_file(file_path: str, filename: str) -> list[dict]:
@@ -250,5 +418,9 @@ def parse_file(file_path: str, filename: str) -> list[dict]:
         return parse_pdf(file_path)
     elif ext == "pptx":
         return parse_pptx(file_path)
+    elif ext == "docx":
+        return parse_docx(file_path)
+    elif ext in {"txt", "md"}:
+        return parse_text_file(file_path)
     else:
         raise ValueError(f"Unsupported file type: {ext}")

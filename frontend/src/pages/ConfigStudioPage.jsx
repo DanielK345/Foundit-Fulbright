@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
 
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:8000";
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:8010";
 
 function ConfigStudioPage() {
   const { documentId } = useParams();
@@ -18,6 +18,10 @@ function ConfigStudioPage() {
     short_answer: 2,
     difficulty: "medium",
     focus: "",
+    bloom_levels: ["understand", "apply"],
+    source_types: [],
+    study_goal: "test_review",
+    question_style: "mixed",
   });
 
   const totalQuestions = useMemo(
@@ -30,6 +34,18 @@ function ConfigStudioPage() {
 
   const handleChange = (field, value) => {
     setConfig((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const toggleArrayValue = (field, value) => {
+    setConfig((prev) => {
+      const current = prev[field] || [];
+      return {
+        ...prev,
+        [field]: current.includes(value)
+          ? current.filter((item) => item !== value)
+          : [...current, value],
+      };
+    });
   };
 
   const handleGenerate = async () => {
@@ -55,16 +71,18 @@ function ConfigStudioPage() {
         short_answer: parseInt(config.short_answer, 10),
         time_limit: parseInt(config.time_limit, 10),
         focus: config.focus || null,
+        bloom_levels: config.bloom_levels.length ? config.bloom_levels : ["understand", "apply"],
+        source_types: config.source_types,
       };
 
       const response = await axios.post(`${API_URL}/generate`, payload, {
-        timeout: 180000,
+        timeout: 600000,
       });
       navigate(`/exam/${response.data.exam_id}`);
     } catch (requestError) {
       if (requestError.code === "ECONNABORTED") {
         setError(
-          "Exam generation timed out while the backend was processing your material.",
+          "Exam generation timed out while the backend was processing your material. Try fewer questions or improve/save a smaller course map.",
         );
       } else if (!requestError.response) {
         setError(
@@ -202,6 +220,62 @@ function ConfigStudioPage() {
               value={config.focus}
             />
           </label>
+
+          <label className="config-field">
+            <span>Study Goal</span>
+            <select
+              onChange={(event) => handleChange("study_goal", event.target.value)}
+              value={config.study_goal}
+            >
+              <option value="test_review">Test review</option>
+              <option value="self_study">Self study</option>
+              <option value="weak_area_practice">Weak-area practice</option>
+            </select>
+          </label>
+
+          <label className="config-field">
+            <span>Question Style</span>
+            <select
+              onChange={(event) => handleChange("question_style", event.target.value)}
+              value={config.question_style}
+            >
+              <option value="mixed">Mixed</option>
+              <option value="conceptual">Conceptual</option>
+              <option value="application">Application</option>
+            </select>
+          </label>
+
+          <div className="config-field config-field-full">
+            <span>Bloom Levels</span>
+            <div className="focus-stepper">
+              {["remember", "understand", "apply", "analyze"].map((level) => (
+                <button
+                  className={`mode-toggle ${config.bloom_levels.includes(level) ? "active" : ""}`}
+                  key={level}
+                  onClick={() => toggleArrayValue("bloom_levels", level)}
+                  type="button"
+                >
+                  {level}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="config-field config-field-full">
+            <span>Source Mix</span>
+            <div className="focus-stepper">
+              {["slides", "homework", "reading", "notes", "previous_test"].map((sourceType) => (
+                <button
+                  className={`mode-toggle ${config.source_types.includes(sourceType) ? "active" : ""}`}
+                  key={sourceType}
+                  onClick={() => toggleArrayValue("source_types", sourceType)}
+                  type="button"
+                >
+                  {sourceType.replace("_", " ")}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         {(error || slowNotice) && (
@@ -238,15 +312,14 @@ function ConfigStudioPage() {
           <p className="sidebar-note-title">Generation hints</p>
           <ul className="plain-list">
             <li>
-              Use a focused prompt when you only want one chapter or concept
-              area.
+              The backend first builds an exam blueprint from your reviewed
+              course map.
             </li>
             <li>
-              Keep short-answer counts lower for faster grading turnaround.
+              Higher-priority units and concepts are selected before lower-value material.
             </li>
             <li>
-              Higher time limits pair well with more explanation-heavy question
-              sets.
+              Use application style when you want fewer definition-only questions.
             </li>
           </ul>
         </div>

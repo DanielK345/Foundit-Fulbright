@@ -2,8 +2,8 @@ import React, { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:8000";
-const ALLOWED_EXTENSIONS = ["pdf", "pptx"];
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:8010";
+const ALLOWED_EXTENSIONS = ["pdf", "pptx", "docx", "txt", "md"];
 
 function UploadPage() {
   const [files, setFiles] = useState([]);
@@ -27,7 +27,7 @@ function UploadPage() {
     const rejected = fileArray.length - valid.length;
 
     if (valid.length === 0) {
-      setMessage({ type: "error", text: "No valid files found. Only PDF and PPTX files are supported." });
+      setMessage({ type: "error", text: "No valid files found. Supported files: PDF, PPTX, DOCX, TXT, and MD." });
       return;
     }
 
@@ -41,7 +41,7 @@ function UploadPage() {
     if (rejected > 0) {
       setMessage({
         type: "error",
-        text: `${rejected} file(s) skipped — only PDF and PPTX files are supported.`,
+        text: `${rejected} file(s) skipped because they are not supported study materials.`,
       });
     } else {
       setMessage(null);
@@ -82,7 +82,7 @@ function UploadPage() {
     try {
       const response = await axios.post(`${API_URL}/upload`, formData, {
         headers: { "Content-Type": "multipart/form-data" },
-        timeout: 120000,
+        timeout: 300000,
       });
 
       setMessage({ type: "success", text: response.data.message });
@@ -118,7 +118,7 @@ function UploadPage() {
     <div className="upload-container">
       <h2>Upload Your Documents</h2>
       <p style={{ color: "#64748b", marginTop: 8 }}>
-        Upload lecture slides or documents to generate an exam
+        Upload slides, homework, readings, notes, or tests to generate practice
       </p>
 
       {/* Toggle between file and folder mode */}
@@ -148,7 +148,7 @@ function UploadPage() {
         <input
           type="file"
           ref={fileInputRef}
-          accept=".pdf,.pptx"
+          accept=".pdf,.pptx,.docx,.txt,.md"
           multiple
           onChange={(e) => { if (e.target.files.length > 0) addFiles(e.target.files); e.target.value = ""; }}
         />
@@ -156,7 +156,7 @@ function UploadPage() {
         <input
           type="file"
           ref={folderInputRef}
-          accept=".pdf,.pptx"
+          accept=".pdf,.pptx,.docx,.txt,.md"
           // eslint-disable-next-line react/no-unknown-property
           webkitdirectory=""
           onChange={(e) => { if (e.target.files.length > 0) addFiles(e.target.files); e.target.value = ""; }}
@@ -166,7 +166,7 @@ function UploadPage() {
         <p>
           <strong>Click to {folderMode ? "select a folder" : "select files"}</strong> or drag and drop
         </p>
-        <p style={{ fontSize: "0.85rem" }}>PDF or PPTX files only — multiple files supported</p>
+        <p style={{ fontSize: "0.85rem" }}>PDF, PPTX, DOCX, TXT, or MD files supported</p>
       </div>
 
       {/* File list */}

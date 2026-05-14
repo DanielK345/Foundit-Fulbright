@@ -1,32 +1,18 @@
 import os
+
 import numpy as np
 import faiss
-import google.generativeai as genai
-
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-
-EMBEDDING_MODEL = "models/gemini-embedding-001"
+from services.ai_provider import embed_texts as provider_embed_texts, embed_query as provider_embed_query
 
 
 def embed_texts(texts: list[str]) -> np.ndarray:
-    """Generate embeddings for a list of texts using Gemini."""
-    # Gemini embedding API supports batching
-    result = genai.embed_content(
-        model=EMBEDDING_MODEL,
-        content=texts,
-        task_type="retrieval_document",
-    )
-    return np.array(result["embedding"], dtype=np.float32)
+    """Generate embeddings for a list of texts using the configured provider."""
+    return provider_embed_texts(texts, task_type="retrieval_document")
 
 
 def embed_query(query: str) -> np.ndarray:
     """Generate embedding for a single query."""
-    result = genai.embed_content(
-        model=EMBEDDING_MODEL,
-        content=query,
-        task_type="retrieval_query",
-    )
-    return np.array(result["embedding"], dtype=np.float32).reshape(1, -1)
+    return provider_embed_query(query)
 
 
 def build_faiss_index(chunks: list[dict], document_id: str) -> tuple[faiss.IndexFlatIP, list[dict]]:

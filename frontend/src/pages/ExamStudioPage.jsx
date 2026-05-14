@@ -4,7 +4,7 @@ import axios from "axios";
 import Timer from "../components/Timer";
 import Question from "../components/Question";
 
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:8000";
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:8010";
 
 function BookIcon() {
   return (
@@ -180,7 +180,14 @@ function ExamStudioPage() {
           isCorrect: detail.is_correct,
           feedback: detail.feedback || "",
           questionIndex: detail.question_index,
+          concept: detail.concept || "",
+          unitTitle: detail.unit_title || "",
+          learningObjective: detail.learning_objective || "",
+          evidence: detail.evidence || "",
+          bloomLevel: detail.bloom_level || "",
+          diagnosis: detail.diagnosis || "",
         })),
+        weakConcepts: data.weak_concepts || [],
       });
       setSubmitted(true);
     } catch (requestError) {
@@ -205,6 +212,19 @@ function ExamStudioPage() {
       gradeExam();
     }
   }, [gradeExam, submitted]);
+
+  const generateWeakPractice = async () => {
+    try {
+      const response = await axios.post(
+        `${API_URL}/practice/weak-areas`,
+        { exam_id: examId, count: 5 },
+        { timeout: 180000 },
+      );
+      navigate(`/exam/${response.data.exam_id}`);
+    } catch {
+      setError("Could not generate weak-area practice. Please try again.");
+    }
+  };
 
   const answeredCount = useMemo(() => getAnsweredCount(answers), [answers]);
   const progressLabel = useMemo(
@@ -301,6 +321,23 @@ function ExamStudioPage() {
             <span>{`${results.score} / ${results.gradable} gradable points`}</span>
           </div>
 
+          {results.weakConcepts?.length > 0 && (
+            <div className="sidebar-card">
+              <p className="eyebrow">Weak Concepts</p>
+              <div className="weak-concept-list">
+                {results.weakConcepts.slice(0, 5).map((item) => (
+                  <div className="weak-concept-item" key={item.concept_id || item.concept}>
+                    <strong>{item.concept}</strong>
+                    <span>{item.diagnosis}</span>
+                  </div>
+                ))}
+              </div>
+              <button className="primary-pill-button" onClick={generateWeakPractice} type="button">
+                Practice Weak Areas
+              </button>
+            </div>
+          )}
+
           <div className="breakdown-card-grid">
             <div className="breakdown-card">
               <strong>{results.total}</strong>
@@ -331,10 +368,10 @@ function ExamStudioPage() {
           <div className="results-header-card">
             <div>
               <p className="eyebrow">Question Review</p>
-              <h1>Advanced Quantum Mechanics Final</h1>
+              <h1>Practice Results</h1>
               <p>
                 Review each answer, inspect the reference explanation, and
-                regenerate when ready.
+                use weak-area practice when ready.
               </p>
             </div>
             <div className="results-header-actions">
@@ -375,9 +412,9 @@ function ExamStudioPage() {
                   </span>
                 </div>
 
-                <p className="review-kicker">{`Question ${detail.questionIndex + 1} • ${getQuestionTypeLabel(
+                <p className="review-kicker">{`Question ${detail.questionIndex + 1} - ${getQuestionTypeLabel(
                   detail.type,
-                )}`}</p>
+                )}${detail.unitTitle ? ` - ${detail.unitTitle}` : ""}${detail.concept ? ` - ${detail.concept}` : ""}`}</p>
                 <h3>{detail.question}</h3>
 
                 <div className="review-answer-grid">
@@ -395,6 +432,17 @@ function ExamStudioPage() {
                   <strong>Why this matters</strong>
                   <p>{detail.explanation}</p>
                   {detail.feedback && <p>{detail.feedback}</p>}
+                  {detail.diagnosis && <p>{detail.diagnosis}</p>}
+                  {detail.learningObjective && (
+                    <p>
+                      <strong>Learning objective:</strong> {detail.learningObjective}
+                    </p>
+                  )}
+                  {detail.evidence && (
+                    <p>
+                      <strong>Evidence:</strong> {detail.evidence}
+                    </p>
+                  )}
                   <small>{detail.source}</small>
                 </div>
               </article>
@@ -465,12 +513,12 @@ function ExamStudioPage() {
         </div>
 
         <div className="sidebar-card sidebar-card-primary">
-          <h3>Proctor Insight</h3>
+          <h3>Study Insight</h3>
           <p>
-            Focus is maintained. Your environment check passed. Keep moving
-            through the canvas.
+            Questions are grounded in uploaded sources and tagged by concept
+            for review after submission.
           </p>
-          <div className="secure-pill">Secure session active</div>
+          <div className="secure-pill">Concept practice active</div>
         </div>
       </aside>
 
@@ -548,11 +596,10 @@ function ExamStudioPage() {
             <div>
               <h3>Need help?</h3>
               <p>
-                Use your source material and answer progressively. This layout
-                mirrors the context card treatment in the Figma design.
+                Use your source material and answer progressively.
               </p>
               <button className="text-action" type="button">
-                Request context hint
+                Context after submit
               </button>
             </div>
           </div>
