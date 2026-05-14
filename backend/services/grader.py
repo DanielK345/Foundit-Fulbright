@@ -143,6 +143,27 @@ def grade_exam(questions: list[dict], answers: dict[str, str]) -> dict:
             if is_correct:
                 score += 1
 
+        elif q_type == "coding":
+            gradable += 1
+            if q.get("options"):
+                # MCQ-style coding question
+                is_correct = (
+                    user_answer.strip().upper().startswith(correct_answer.strip().upper())
+                    if user_answer
+                    else False
+                )
+            else:
+                # Short-answer style coding question
+                result = _grade_short_answer(
+                    question=q.get("question", ""),
+                    correct_answer=correct_answer,
+                    user_answer=user_answer,
+                )
+                is_correct = result["is_correct"]
+                feedback = result["feedback"]
+            if is_correct:
+                score += 1
+
         details.append({
             "question_index": i,
             "question": q.get("question", ""),
@@ -153,6 +174,7 @@ def grade_exam(questions: list[dict], answers: dict[str, str]) -> dict:
             "source": q.get("source", ""),
             "is_correct": is_correct,
             "feedback": feedback,
+            "code_snippet": q.get("code_snippet"),
         })
 
     return {

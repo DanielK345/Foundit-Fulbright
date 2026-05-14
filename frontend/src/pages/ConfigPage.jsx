@@ -27,6 +27,7 @@ function ConfigPage() {
     mcq: 5,
     true_false: 3,
     short_answer: 2,
+    coding: 2,
     difficulty: "medium",
     focus: "",
   });
@@ -110,6 +111,7 @@ function ConfigPage() {
         mcq: parseInt(config.mcq),
         true_false: parseInt(config.true_false),
         short_answer: parseInt(config.short_answer),
+        coding: parseInt(config.coding),
         time_limit: parseInt(config.time_limit),
         focus: ideas || config.focus || null,
       }, { timeout: 180000 });
@@ -257,13 +259,23 @@ function ConfigPage() {
         </div>
       </div>
 
-      <div className="form-group">
-        <label>Short Answer Questions</label>
-        <input
-          type="number" min="0" max="10"
-          value={config.short_answer}
-          onChange={(e) => handleChange("short_answer", e.target.value)}
-        />
+      <div className="form-row">
+        <div className="form-group">
+          <label>Short Answer Questions</label>
+          <input
+            type="number" min="0" max="10"
+            value={config.short_answer}
+            onChange={(e) => handleChange("short_answer", e.target.value)}
+          />
+        </div>
+        <div className="form-group">
+          <label>Coding Questions</label>
+          <input
+            type="number" min="0" max="10"
+            value={config.coding}
+            onChange={(e) => handleChange("coding", e.target.value)}
+          />
+        </div>
       </div>
 
       <div className="form-group">

@@ -578,6 +578,103 @@ body {
   background: #fff;
 }
 
+/* Code snippet block inside exam questions */
+.exam-code-snippet {
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 8px;
+  padding: 16px 18px;
+  font-family: "Fira Code", "Cascadia Code", "Consolas", monospace;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  overflow-x: auto;
+  white-space: pre;
+  margin: 12px 0 16px;
+  border: 1px solid #1e293b;
+}
+
+.review-code-snippet {
+  margin: 8px 0 12px;
+}
+
+/* Coding exercises section on Review page */
+.coding-questions-section {
+  margin-top: 32px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 24px;
+}
+
+.coding-questions-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 0 0 4px;
+}
+
+.coding-questions-subtitle {
+  font-size: 0.85rem;
+  color: #64748b;
+  margin: 0 0 16px;
+}
+
+.coding-questions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.coding-question-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 16px 18px;
+  background: #f8fafc;
+}
+
+.coding-question-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.coding-question-number {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #3b82f6;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 4px;
+  padding: 2px 7px;
+  flex-shrink: 0;
+}
+
+.coding-question-title-text {
+  font-size: 0.95rem;
+  color: #1e293b;
+}
+
+.coding-question-description {
+  font-size: 0.875rem;
+  color: #334155;
+  line-height: 1.6;
+  margin: 0 0 8px;
+}
+
+.coding-question-hint {
+  font-size: 0.82rem;
+  color: #64748b;
+  margin: 0;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 7px 11px;
+}
+
+.coding-question-hint-label {
+  font-weight: 600;
+  color: #475569;
+}
+
 /* Progress stepper inside sidebar */
 .review-stepper {
   display: flex;

@@ -15,6 +15,7 @@ TASK: Generate the following questions based ONLY on the content above:
 - {mcq} multiple choice questions (MCQ)
 - {true_false} true/false questions
 - {short_answer} short answer questions
+- {coding} coding questions (each must include a real code snippet from the topic)
 
 Difficulty: {difficulty}
 {focus_line}
@@ -24,9 +25,11 @@ GUIDELINES:
 - MCQ distractors must be plausible — avoid obviously wrong answers
 - True/False statements must be unambiguous
 - Short answer questions should have a concise, clear correct answer
+- Coding questions MUST include a code_snippet field with actual runnable code relevant to the material
+- Coding questions should ask about output, behavior, bugs, or what a function returns
+- Coding questions can be MCQ-style (with options A/B/C/D) OR short-answer style (options: null)
 - Cover a range of topics from across the content
 - Do not generate questions if the content is insufficient — skip that type
-- Do not ask questions that fail to test knowledge of the material, e.g which is not mentioned in the content
 
 OUTPUT (strict JSON only, no extra text):
 {{
@@ -34,6 +37,7 @@ OUTPUT (strict JSON only, no extra text):
     {{
       "type": "mcq",
       "question": "...",
+      "code_snippet": null,
       "options": ["A) ...", "B) ...", "C) ...", "D) ..."],
       "answer": "A",
       "explanation": "Brief explanation of why this is correct.",
@@ -42,6 +46,7 @@ OUTPUT (strict JSON only, no extra text):
     {{
       "type": "true_false",
       "question": "...",
+      "code_snippet": null,
       "options": ["True", "False"],
       "answer": "True",
       "explanation": "Brief explanation.",
@@ -50,9 +55,28 @@ OUTPUT (strict JSON only, no extra text):
     {{
       "type": "short_answer",
       "question": "...",
+      "code_snippet": null,
       "options": null,
       "answer": "Expected answer (1-2 sentences).",
       "explanation": "Brief explanation.",
+      "source": "page_1"
+    }},
+    {{
+      "type": "coding",
+      "question": "What is the output of the following code?",
+      "code_snippet": "int x = 5;\\nx++;\\nprintf(\"%d\\\\n\", x);",
+      "options": ["A) 5", "B) 6", "C) 4", "D) Compile error"],
+      "answer": "B",
+      "explanation": "x++ increments x from 5 to 6 before printf runs.",
+      "source": "slide_2"
+    }},
+    {{
+      "type": "coding",
+      "question": "What does this function return when called with n=4?",
+      "code_snippet": "int f(int n) {{\\n  if (n <= 1) return n;\\n  return f(n-1) + f(n-2);\\n}}",
+      "options": null,
+      "answer": "3",
+      "explanation": "This is a Fibonacci function. f(4) = f(3)+f(2) = 2+1 = 3.",
       "source": "page_1"
     }}
   ]
@@ -77,6 +101,7 @@ GUIDELINES:
 - Do NOT include any intro line like "Here are the main ideas" — output the content directly
 
 Output only the summary."""
+
 
 
 def extract_main_ideas(chunks: list[dict]) -> str:
@@ -107,6 +132,7 @@ def generate_questions(
     true_false: int,
     short_answer: int,
     difficulty: str,
+    coding: int = 0,
     focus: str = None,
     temperature: float = 0.7,
 ) -> list[dict]:
@@ -119,6 +145,7 @@ def generate_questions(
         mcq=mcq,
         true_false=true_false,
         short_answer=short_answer,
+        coding=coding,
         difficulty=difficulty,
         focus_line=focus_line,
     )

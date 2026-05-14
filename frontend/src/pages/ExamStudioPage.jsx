@@ -71,6 +71,7 @@ function XIcon() {
 function getQuestionTypeLabel(type) {
   if (type === "mcq") return "Multiple Choice";
   if (type === "true_false") return "True / False";
+  if (type === "coding") return "Coding";
   return "Short Answer";
 }
 
@@ -180,6 +181,7 @@ function ExamStudioPage() {
           isCorrect: detail.is_correct,
           feedback: detail.feedback || "",
           questionIndex: detail.question_index,
+          codeSnippet: detail.code_snippet || null,
         })),
       });
       setSubmitted(true);
@@ -379,6 +381,9 @@ function ExamStudioPage() {
                   detail.type,
                 )}`}</p>
                 <h3>{detail.question}</h3>
+                {detail.codeSnippet && (
+                  <pre className="exam-code-snippet review-code-snippet"><code>{detail.codeSnippet}</code></pre>
+                )}
 
                 <div className="review-answer-grid">
                   <div className="review-answer-box">

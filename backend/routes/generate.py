@@ -41,15 +41,16 @@ async def generate_exam(config: ExamConfig):
     temperature = 0.7
 
     for attempt in range(max_retries + 1):
-        valid_by_type = {"mcq": 0, "true_false": 0, "short_answer": 0}
+        valid_by_type = {"mcq": 0, "true_false": 0, "short_answer": 0, "coding": 0}
         for q in all_valid:
             valid_by_type[q["type"]] = valid_by_type.get(q["type"], 0) + 1
 
         need_mcq = max(0, config.mcq - valid_by_type["mcq"])
         need_tf = max(0, config.true_false - valid_by_type["true_false"])
         need_sa = max(0, config.short_answer - valid_by_type["short_answer"])
+        need_coding = max(0, config.coding - valid_by_type["coding"])
 
-        if need_mcq + need_tf + need_sa == 0:
+        if need_mcq + need_tf + need_sa + need_coding == 0:
             break
 
         try:
@@ -58,6 +59,7 @@ async def generate_exam(config: ExamConfig):
                 mcq=need_mcq,
                 true_false=need_tf,
                 short_answer=need_sa,
+                coding=need_coding,
                 difficulty=config.difficulty,
                 focus=config.focus,
                 temperature=temperature,
@@ -89,6 +91,7 @@ async def generate_exam(config: ExamConfig):
             answer=q["answer"],
             explanation=q["explanation"],
             source=q["source"],
+            code_snippet=q.get("code_snippet"),
         )
         for q in all_valid
     ]
