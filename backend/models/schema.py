@@ -8,17 +8,19 @@ class ExamConfig(BaseModel):
     mcq: int = 5
     true_false: int = 3
     short_answer: int = 2
+    coding: int = 2
     difficulty: str = "medium"
     focus: Optional[str] = None
 
 
 class Question(BaseModel):
-    type: str  # "mcq", "true_false", "short_answer"
+    type: str  # "mcq", "true_false", "short_answer", "coding"
     question: str
     options: Optional[list[str]] = None
     answer: str
     explanation: str
     source: str
+    code_snippet: Optional[str] = None
 
 
 class ExamResponse(BaseModel):
@@ -49,6 +51,11 @@ class IdeasResponse(BaseModel):
     ideas: str
 
 
+class FeedbackRequest(BaseModel):
+    exam_id: str
+    feedback: str
+
+
 class GradeRequest(BaseModel):
     exam_id: str
     answers: dict[str, str]  # question index (str) -> user answer
@@ -64,6 +71,7 @@ class QuestionResult(BaseModel):
     source: str
     is_correct: Optional[bool]
     feedback: str = ""
+    code_snippet: Optional[str] = None
 
 
 class GradeResponse(BaseModel):

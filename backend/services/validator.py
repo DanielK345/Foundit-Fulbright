@@ -58,9 +58,17 @@ def _is_valid_structure(question: dict) -> bool:
     elif qtype == "true_false":
         if question["answer"] not in ("True", "False"):
             return False
+    elif qtype == "coding":
+        # MCQ-style coding needs 4 options; short-answer style needs none
+        if question.get("options") and len(question["options"]) < 4:
+            return False
+        if not question.get("code_snippet"):
+            return False
+    elif qtype not in ("short_answer",):
+        return False
 
     # Check minimum question length
-    if len(question["question"].split()) < 5:
+    if len(question["question"].split()) < 3:
         return False
 
     return True

@@ -71,6 +71,7 @@ function XIcon() {
 function getQuestionTypeLabel(type) {
   if (type === "mcq") return "Multiple Choice";
   if (type === "true_false") return "True / False";
+  if (type === "coding") return "Coding";
   return "Short Answer";
 }
 
@@ -99,6 +100,10 @@ function ExamStudioPage() {
   const [grading, setGrading] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [flaggedQuestions, setFlaggedQuestions] = useState([]);
+  const [feedbackText, setFeedbackText] = useState("");
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
+  const [feedbackError, setFeedbackError] = useState(null);
 
   useEffect(() => {
     const fetchExam = async () => {
@@ -180,6 +185,7 @@ function ExamStudioPage() {
           isCorrect: detail.is_correct,
           feedback: detail.feedback || "",
           questionIndex: detail.question_index,
+          codeSnippet: detail.code_snippet || null,
         })),
       });
       setSubmitted(true);
@@ -211,6 +217,23 @@ function ExamStudioPage() {
     () => buildProgressLabel(answeredCount, exam?.questions.length || 0),
     [answeredCount, exam],
   );
+
+  const handleFeedbackSubmit = async () => {
+    if (!feedbackText.trim()) return;
+    setFeedbackSubmitting(true);
+    setFeedbackError(null);
+    try {
+      await axios.post(`${API_URL}/feedback`, {
+        exam_id: examId,
+        feedback: feedbackText.trim(),
+      });
+      setFeedbackSubmitted(true);
+    } catch {
+      setFeedbackError("Failed to submit feedback. Please try again.");
+    } finally {
+      setFeedbackSubmitting(false);
+    }
+  };
 
   if (isDemo) {
     return (
@@ -348,7 +371,7 @@ function ExamStudioPage() {
             </div>
           </div>
 
-          <div className="review-stack">
+          <div className="review-stack" id="review-stack">
             {results.details.map((detail, index) => (
               <article
                 className={`review-card ${
@@ -379,6 +402,9 @@ function ExamStudioPage() {
                   detail.type,
                 )}`}</p>
                 <h3>{detail.question}</h3>
+                {detail.codeSnippet && (
+                  <pre className="exam-code-snippet review-code-snippet"><code>{detail.codeSnippet}</code></pre>
+                )}
 
                 <div className="review-answer-grid">
                   <div className="review-answer-box">
@@ -399,6 +425,42 @@ function ExamStudioPage() {
                 </div>
               </article>
             ))}
+          </div>
+          <div className="feedback-card">
+            <div className="feedback-card-header">
+              <h2>Help improve future exams</h2>
+              <p>
+                Your feedback is sent directly to the AI prompt — it will apply
+                your suggestions the next time an exam is generated from this document.
+              </p>
+            </div>
+
+            {feedbackSubmitted ? (
+              <div className="feedback-success">
+                Feedback saved! It will be applied to your next exam generation.
+              </div>
+            ) : (
+              <>
+                <textarea
+                  className="feedback-textarea"
+                  placeholder="e.g. The coding questions were too easy. Add more questions about mutex and semaphores. Avoid true/false questions."
+                  value={feedbackText}
+                  onChange={(e) => setFeedbackText(e.target.value)}
+                  rows={4}
+                />
+                {feedbackError && (
+                  <p className="feedback-error">{feedbackError}</p>
+                )}
+                <button
+                  className="primary-pill-button"
+                  disabled={feedbackSubmitting || !feedbackText.trim()}
+                  onClick={handleFeedbackSubmit}
+                  type="button"
+                >
+                  {feedbackSubmitting ? "Submitting..." : "Submit feedback"}
+                </button>
+              </>
+            )}
           </div>
         </section>
       </div>

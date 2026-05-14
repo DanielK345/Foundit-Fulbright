@@ -3,6 +3,7 @@ import React from "react";
 function typeLabel(type) {
   if (type === "mcq") return "Multiple Choice Question";
   if (type === "true_false") return "True / False Question";
+  if (type === "coding") return "Coding Question";
   return "Short Answer Question";
 }
 
@@ -14,7 +15,9 @@ function Question({
   isFlagged,
   onToggleFlag,
 }) {
-  const { type, question: questionText, options } = question;
+  const { type, question: questionText, options, code_snippet: codeSnippet } = question;
+  const isCodingMCQ = type === "coding" && options && options.length > 0;
+  const isCodingShort = type === "coding" && (!options || options.length === 0);
 
   return (
     <section className="exam-question-card">
@@ -39,7 +42,11 @@ function Question({
 
         <p className="exam-question-text">{questionText}</p>
 
-      {(type === "mcq" || type === "true_false") && options && (
+        {codeSnippet && (
+          <pre className="exam-code-snippet"><code>{codeSnippet}</code></pre>
+        )}
+
+      {(type === "mcq" || type === "true_false" || isCodingMCQ) && options && (
         <div className="answer-stack">
           {options.map((option, i) => (
               <label className={`answer-option ${answer === option ? "selected" : ""}`} key={i}>
@@ -67,7 +74,20 @@ function Question({
               placeholder="Type the concept, principle, or explanation you want to submit."
               value={answer || ""}
               onChange={(e) => onAnswer(e.target.value)}
-              rows="6"
+              rows="4"
+            />
+          </label>
+      )}
+
+      {isCodingShort && (
+          <label className="short-answer-shell">
+            <span>Your answer</span>
+            <textarea
+              className="short-answer-input"
+              placeholder="Describe the output or behavior — e.g. 'Less than 200000, varies due to race condition' or a specific value with a brief reason."
+              value={answer || ""}
+              onChange={(e) => onAnswer(e.target.value)}
+              rows="4"
             />
           </label>
       )}

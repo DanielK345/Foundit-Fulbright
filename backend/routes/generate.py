@@ -1,6 +1,6 @@
 import uuid
 from fastapi import APIRouter, HTTPException
-from models.schema import ExamConfig, ExamResponse, Question, GradeRequest, GradeResponse
+from models.schema import ExamConfig, ExamResponse, Question, GradeRequest, GradeResponse, FeedbackRequest
 from services.generator import generate_questions
 from services.validator import validate_questions
 from services.grader import grade_exam
@@ -10,7 +10,7 @@ router = APIRouter()
 
 @router.post("/generate", response_model=ExamResponse)
 async def generate_exam(config: ExamConfig):
-    from app import documents_store, exams_store
+    from app import documents_store, exams_store, exam_doc_store, feedback_store
 
     # Validate document exists
     if config.document_id not in documents_store:
@@ -41,16 +41,19 @@ async def generate_exam(config: ExamConfig):
     temperature = 0.7
 
     for attempt in range(max_retries + 1):
-        valid_by_type = {"mcq": 0, "true_false": 0, "short_answer": 0}
+        valid_by_type = {"mcq": 0, "true_false": 0, "short_answer": 0, "coding": 0}
         for q in all_valid:
             valid_by_type[q["type"]] = valid_by_type.get(q["type"], 0) + 1
 
         need_mcq = max(0, config.mcq - valid_by_type["mcq"])
         need_tf = max(0, config.true_false - valid_by_type["true_false"])
         need_sa = max(0, config.short_answer - valid_by_type["short_answer"])
+        need_coding = max(0, config.coding - valid_by_type["coding"])
 
-        if need_mcq + need_tf + need_sa == 0:
+        if need_mcq + need_tf + need_sa + need_coding == 0:
             break
+
+        past_feedback = feedback_store.get(config.document_id, [])
 
         try:
             questions = generate_questions(
@@ -58,8 +61,10 @@ async def generate_exam(config: ExamConfig):
                 mcq=need_mcq,
                 true_false=need_tf,
                 short_answer=need_sa,
+                coding=need_coding,
                 difficulty=config.difficulty,
                 focus=config.focus,
+                past_feedback=past_feedback,
                 temperature=temperature,
             )
         except Exception as e:
@@ -89,6 +94,7 @@ async def generate_exam(config: ExamConfig):
             answer=q["answer"],
             explanation=q["explanation"],
             source=q["source"],
+            code_snippet=q.get("code_snippet"),
         )
         for q in all_valid
     ]
@@ -100,6 +106,7 @@ async def generate_exam(config: ExamConfig):
     )
 
     exams_store[exam_id] = exam_data
+    exam_doc_store[exam_id] = config.document_id
 
     return exam_data
 
@@ -112,6 +119,21 @@ async def get_exam(exam_id: str):
         raise HTTPException(status_code=404, detail="Exam not found.")
 
     return exams_store[exam_id]
+
+
+@router.post("/feedback")
+async def submit_feedback(request: FeedbackRequest):
+    from app import exams_store, exam_doc_store, feedback_store
+
+    if request.exam_id not in exam_doc_store:
+        raise HTTPException(status_code=404, detail="Exam not found.")
+
+    doc_id = exam_doc_store[request.exam_id]
+    if doc_id not in feedback_store:
+        feedback_store[doc_id] = []
+    feedback_store[doc_id].append(request.feedback.strip())
+
+    return {"message": "Feedback saved. It will be applied to the next exam generated from this document."}
 
 
 @router.post("/grade", response_model=GradeResponse)

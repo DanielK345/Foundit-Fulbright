@@ -1561,6 +1561,62 @@ a {
   margin-top: 22px;
 }
 
+/* Feedback card at bottom of results */
+.feedback-card {
+  margin-top: 28px;
+  padding: 28px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.03);
+}
+
+.feedback-card-header h2 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0 0 6px;
+}
+
+.feedback-card-header p {
+  font-size: 0.875rem;
+  color: #94a3b8;
+  margin: 0 0 16px;
+}
+
+.feedback-textarea {
+  width: 100%;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 0.9rem;
+  font-family: inherit;
+  color: #e2e8f0;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+  margin-bottom: 12px;
+}
+
+.feedback-textarea:focus {
+  border-color: #3b82f6;
+}
+
+.feedback-success {
+  padding: 14px 16px;
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: 8px;
+  color: #86efac;
+  font-size: 0.9rem;
+}
+
+.feedback-error {
+  color: #f87171;
+  font-size: 0.85rem;
+  margin: 0 0 10px;
+}
+
 .review-card {
   padding: 24px;
 }
