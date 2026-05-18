@@ -15,29 +15,41 @@ router = APIRouter()
 @router.post("/generate", response_model=ExamResponse)
 async def generate_exam(config: ExamConfig):
     from app import documents_store, exams_store, exam_doc_store, feedback_store
+    from services.bm25_retriever import should_use_retrieval, retrieve_chunks
 
     # Validate document exists
     if config.document_id not in documents_store:
         raise HTTPException(status_code=404, detail="Document not found. Please upload a file first.")
 
     doc = documents_store[config.document_id]
-    pages = doc["pages"]
 
-    # Build full context — send everything to Gemini directly.
-    # Slide decks are typically < 20k tokens, well within Gemini's 1M context window.
-    # RAG was fragmenting the content and degrading question quality.
+    # Use original_pages for retrieval — these are preserved even when the user
+    # edits the context in the review step (which overwrites doc["pages"]).
+    source_pages = doc.get("original_pages") or doc["pages"]
+
     all_chunks = [
         {
             "source": page.get("source", ""),
             "source_label": page.get("source_label", page.get("source", "")),
             "content": page["content"],
         }
-        for page in pages
+        for page in source_pages
         if page.get("content", "").strip()
     ]
 
     if not all_chunks:
         raise HTTPException(status_code=400, detail="No text content found in the document.")
+
+    # Two-stage BM25 retrieval for long documents.
+    # Short documents (slides, notes ≤ 15 pages) still get full context —
+    # Gemini's 1M-token window handles them well and fragmentation hurts quality.
+    if should_use_retrieval(all_chunks):
+        exam_chunks = retrieve_chunks(
+            pages=all_chunks,
+            focus_text=config.focus,
+        )
+    else:
+        exam_chunks = all_chunks
 
     # Generate + Validate (with retry)
     all_valid = []
@@ -61,7 +73,7 @@ async def generate_exam(config: ExamConfig):
 
         try:
             questions = generate_questions(
-                chunks=all_chunks,
+                chunks=exam_chunks,
                 mcq=need_mcq,
                 true_false=need_tf,
                 short_answer=need_sa,
@@ -77,7 +89,7 @@ async def generate_exam(config: ExamConfig):
                 continue
             raise HTTPException(status_code=500, detail=f"Question generation failed: {str(e)}")
 
-        valid, rejected = validate_questions(questions, all_chunks)
+        valid, rejected = validate_questions(questions, exam_chunks)
         all_valid.extend(valid)
 
         if len(rejected) == 0 or attempt >= max_retries:

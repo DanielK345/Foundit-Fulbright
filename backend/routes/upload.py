@@ -3,10 +3,16 @@ import uuid
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from models.schema import UploadResponse, DocumentContextResponse, UpdateContextRequest, IdeasResponse
 from services.parser import parse_file
+from config import (
+    ALLOWED_EXTENSIONS,
+    MAX_FILES_PER_UPLOAD,
+    MAX_FILE_SIZE_BYTES,
+    MAX_TOTAL_SIZE_BYTES,
+    MAX_PAGES_PER_FILE,
+    MAX_TOTAL_PAGES,
+)
 
 router = APIRouter()
-
-ALLOWED_EXTENSIONS = {"pdf", "pptx"}
 
 
 @router.post("", response_model=UploadResponse)
@@ -14,10 +20,17 @@ async def upload_files(files: list[UploadFile] = File(...)):
     if not files:
         raise HTTPException(status_code=400, detail="No files provided.")
 
+    if len(files) > MAX_FILES_PER_UPLOAD:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Too many files. Maximum {MAX_FILES_PER_UPLOAD} files per upload.",
+        )
+
     document_id = str(uuid.uuid4())
     upload_dir = "uploads"
     all_pages = []
     filenames = []
+    total_size_bytes = 0
 
     for file in files:
         filename = file.filename
@@ -30,9 +43,31 @@ async def upload_files(files: list[UploadFile] = File(...)):
                 detail=f"Unsupported file type: {safe_name}. Only PDF and PPTX files are supported.",
             )
 
+        # Read content and enforce per-file and total size limits before writing to disk
+        content = await file.read()
+        file_size = len(content)
+
+        if file_size > MAX_FILE_SIZE_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=(
+                    f"{safe_name} is too large ({file_size / 1024 / 1024:.1f} MB). "
+                    f"Maximum allowed size per file is {MAX_FILE_SIZE_BYTES // 1024 // 1024} MB."
+                ),
+            )
+
+        total_size_bytes += file_size
+        if total_size_bytes > MAX_TOTAL_SIZE_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=(
+                    f"Combined upload size exceeds the "
+                    f"{MAX_TOTAL_SIZE_BYTES // 1024 // 1024} MB limit."
+                ),
+            )
+
         # Save file to disk
         file_path = os.path.join(upload_dir, f"{document_id}_{safe_name}")
-        content = await file.read()
         with open(file_path, "wb") as f:
             f.write(content)
 
@@ -46,6 +81,19 @@ async def upload_files(files: list[UploadFile] = File(...)):
         if not parsed_pages:
             os.remove(file_path)
             raise HTTPException(status_code=400, detail=f"No text content found in {safe_name}.")
+
+        if len(parsed_pages) > MAX_PAGES_PER_FILE:
+            os.remove(file_path)
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"{safe_name} has {len(parsed_pages)} pages, which exceeds the "
+                    f"{MAX_PAGES_PER_FILE}-page limit per file."
+                ),
+            )
+
+        # Raw file is no longer needed — all content is in parsed_pages.
+        os.remove(file_path)
 
         enriched_pages = []
         for page in parsed_pages:
@@ -61,11 +109,23 @@ async def upload_files(files: list[UploadFile] = File(...)):
         all_pages.extend(enriched_pages)
         filenames.append(safe_name)
 
-    # Store aggregated parsed data under a single document_id
+        if len(all_pages) > MAX_TOTAL_PAGES:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Total pages across all uploaded files exceeds the "
+                    f"{MAX_TOTAL_PAGES}-page limit."
+                ),
+            )
+
+    # Store aggregated parsed data under a single document_id.
+    # original_pages is kept intact for BM25 retrieval even after the user
+    # edits the context in the review step (which overwrites "pages").
     from app import documents_store
     documents_store[document_id] = {
         "filenames": filenames,
         "pages": all_pages,
+        "original_pages": list(all_pages),
     }
 
     file_word = "file" if len(filenames) == 1 else "files"

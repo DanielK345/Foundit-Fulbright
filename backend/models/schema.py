@@ -1,14 +1,18 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Any, Optional
+from config import (
+    MAX_MCQ, MAX_TRUE_FALSE, MAX_SHORT_ANSWER, MAX_CODING,
+    MIN_TIME_LIMIT, MAX_TIME_LIMIT,
+)
 
 
 class ExamConfig(BaseModel):
     document_id: str
-    time_limit: int = 30  # minutes
-    mcq: int = 5
-    true_false: int = 3
-    short_answer: int = 2
-    coding: int = 2
+    time_limit: int = Field(default=30, ge=MIN_TIME_LIMIT, le=MAX_TIME_LIMIT)
+    mcq: int = Field(default=5, ge=0, le=MAX_MCQ)
+    true_false: int = Field(default=3, ge=0, le=MAX_TRUE_FALSE)
+    short_answer: int = Field(default=2, ge=0, le=MAX_SHORT_ANSWER)
+    coding: int = Field(default=2, ge=0, le=MAX_CODING)
     difficulty: str = "medium"
     focus: Optional[str] = None
 

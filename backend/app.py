@@ -21,7 +21,6 @@ app.add_middleware(
 
 # Ensure required directories exist
 os.makedirs("uploads", exist_ok=True)
-os.makedirs("faiss_stores", exist_ok=True)
 
 # In-memory stores
 documents_store = {}       # document_id -> parsed data

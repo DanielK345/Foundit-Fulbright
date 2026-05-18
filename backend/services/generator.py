@@ -11,7 +11,8 @@ CONTENT:
 
 ---
 
-TASK: Generate the following questions based ONLY on the content above:
+TASK: Generate the following questions grounded in the content above. Do not introduce facts,
+formulas, or concepts that are absent from every provided source.
 - {mcq} multiple choice questions (MCQ)
 - {true_false} true/false questions
 - {short_answer} short answer questions
@@ -20,7 +21,33 @@ TASK: Generate the following questions based ONLY on the content above:
 Difficulty: {difficulty}
 {focus_line}
 
-Follow these principles when generating questions:
+SOURCE-AWARE SYNTHESIS STRATEGY:
+The content above may come from multiple source types — LECTURE SLIDES, LECTURE NOTES,
+HOMEWORK, and READING material. Apply the following rules based on source type:
+
+  LECTURE SLIDES / NOTES:
+    - Primary source. Most questions should test concepts, definitions, and applications
+      found here.
+
+  HOMEWORK sections (tagged [Type: HOMEWORK]):
+    - Do NOT copy or closely paraphrase any homework question verbatim.
+    - Use homework problems as inspiration only: change numerical values, reframe the
+      scenario, alter the difficulty level, or require the student to apply the same
+      concept from a different angle or in a new context.
+    - This ensures students cannot pass by memorizing model solutions.
+
+  READING / REFERENCE MATERIAL (tagged [Type: READING]):
+    - Concepts and terminology from readings may appear in questions even if not explicitly
+      covered in the lecture slides.
+    - Cross-source synthesis is encouraged: generate questions that connect a concept
+      introduced in a reading with a related concept from the lecture slides.
+
+  CROSS-SOURCE QUESTIONS:
+    - When multiple source types are present, at least some questions should require
+      knowledge from more than one source. For such questions, list all relevant sources
+      in the 'source' field separated by commas, e.g., "slide_5, hw2_page_3".
+
+Follow these general principles when generating questions:
 1. Progressive difficulty: Start with foundational concepts and gradually increase complexity
 2. Questions should test understanding of key concepts, not trivial details or filler questions like "Which of these is covered in the context?" 
 3. Cognitive levels: Include a mix of recall, understanding, application, and analysis questions
@@ -132,12 +159,29 @@ def extract_main_ideas(chunks: list[dict]) -> str:
     return _summarize(chunks)
 
 
+_HW_KEYWORDS = ("hw", "homework", "assignment", "problem_set", "pset", "exercise")
+_READING_KEYWORDS = ("reading", "read", "chapter", "textbook", "reference", "material")
+
+
+def _classify_source_type(chunk: dict) -> str:
+    """Heuristically classify a chunk's source as LECTURE SLIDES, HOMEWORK, or READING."""
+    filename = (chunk.get("filename") or "").lower()
+    if filename.endswith(".pptx"):
+        return "LECTURE SLIDES"
+    if any(kw in filename for kw in _HW_KEYWORDS):
+        return "HOMEWORK"
+    if any(kw in filename for kw in _READING_KEYWORDS):
+        return "READING"
+    return "LECTURE NOTES"
+
+
 def build_context_block(chunks: list[dict]) -> str:
-    """Build a context string from retrieved chunks."""
+    """Build a context string from retrieved chunks, annotated by source type."""
     parts = []
     for chunk in chunks:
         source = chunk.get("source_label", chunk["source"])
-        parts.append(f"[Source: {source}]\n{chunk['content']}")
+        source_type = _classify_source_type(chunk)
+        parts.append(f"[Source: {source}] [Type: {source_type}]\n{chunk['content']}")
     return "\n\n".join(parts)
 
 
