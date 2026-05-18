@@ -2,7 +2,7 @@ import React, { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:8000";
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:8010";
 const ALLOWED_EXTENSIONS = ["pdf", "pptx"];
 
 function formatSize(size) {
@@ -26,6 +26,8 @@ function UploadDashboardPage() {
   const [dragging, setDragging] = useState(false);
   const [folderMode, setFolderMode] = useState(false);
   const [slowNotice, setSlowNotice] = useState(false);
+  const [processingStatus, setProcessingStatus] = useState(null);
+  const [fileProgresses, setFileProgresses] = useState([]);
   const fileInputRef = useRef(null);
   const folderInputRef = useRef(null);
   const navigate = useNavigate();
@@ -83,31 +85,85 @@ function UploadDashboardPage() {
     }
   };
 
+  const pollProcessingStatus = async (documentId) => {
+    const maxAttempts = 180;
+    for (let i = 0; i < maxAttempts; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      try {
+        const res = await axios.get(`${API_URL}/upload/${documentId}/status`, { timeout: 5000 });
+        const { status, processed_files, total_files, total_pages, error } = res.data;
+        if (status === "ready") {
+          setProcessingStatus(null);
+          return { success: true, total_pages };
+        }
+        if (status === "error") {
+          setProcessingStatus(null);
+          return { success: false, error: error || "Processing failed." };
+        }
+        setProcessingStatus({ processed_files, total_files, total_pages });
+      } catch (_) {
+        // network blip — keep retrying
+      }
+    }
+    return { success: false, error: "Processing timed out after 3 minutes." };
+  };
+
   const handleUpload = async () => {
     if (files.length === 0) return;
 
     setUploading(true);
     setMessage(null);
     setSlowNotice(false);
+    setProcessingStatus(null);
+    setFileProgresses(files.map(() => 0));
 
     const formData = new FormData();
     files.forEach((file) => {
       formData.append("files", file);
     });
 
+    // Pre-compute cumulative byte offsets for per-file progress estimation
+    const fileSizes = files.map((f) => f.size);
+    const totalSize = fileSizes.reduce((s, n) => s + n, 0);
+
     const slowTimer = setTimeout(() => setSlowNotice(true), 5000);
 
     try {
       const response = await axios.post(`${API_URL}/upload`, formData, {
         headers: { "Content-Type": "multipart/form-data" },
-        timeout: 120000,
+        timeout: 30000,
+        onUploadProgress: (evt) => {
+          if (!evt.total && totalSize === 0) return;
+          const loaded = evt.loaded;
+          const progresses = [];
+          let cumulative = 0;
+          for (const size of fileSizes) {
+            if (loaded >= cumulative + size) {
+              progresses.push(100);
+            } else if (loaded > cumulative) {
+              progresses.push(Math.round(((loaded - cumulative) / size) * 100));
+            } else {
+              progresses.push(0);
+            }
+            cumulative += size;
+          }
+          setFileProgresses(progresses);
+        },
       });
 
-      setMessage({ type: "success", text: response.data.message });
-      setTimeout(() => {
+      clearTimeout(slowTimer);
+      setSlowNotice(false);
+      setMessage({ type: "info", text: "Files uploaded — parsing in background..." });
+
+      const result = await pollProcessingStatus(response.data.document_id);
+
+      if (result.success) {
         navigate(`/review/${response.data.document_id}`);
-      }, 700);
+      } else {
+        setMessage({ type: "error", text: result.error || "Processing failed. Please try again." });
+      }
     } catch (error) {
+      clearTimeout(slowTimer);
       if (error.code === "ECONNABORTED") {
         setMessage({
           type: "error",
@@ -121,14 +177,15 @@ function UploadDashboardPage() {
       } else {
         setMessage({
           type: "error",
-          text:
-            error.response?.data?.detail || "Upload failed. Please try again.",
+          text: error.response?.data?.detail || "Upload failed. Please try again.",
         });
       }
     } finally {
       clearTimeout(slowTimer);
       setUploading(false);
       setSlowNotice(false);
+      setProcessingStatus(null);
+      setFileProgresses([]);
     }
   };
 
@@ -231,7 +288,11 @@ function UploadDashboardPage() {
               onClick={handleUpload}
               type="button"
             >
-              {uploading ? "Uploading resources..." : "Continue to exam setup"}
+              {uploading
+                ? processingStatus
+                  ? `Parsing… ${processingStatus.processed_files}/${processingStatus.total_files} files`
+                  : "Uploading resources..."
+                : "Continue to exam setup"}
             </button>
           </div>
 
@@ -261,6 +322,20 @@ function UploadDashboardPage() {
             {message.text}
           </div>
         )}
+
+        {uploading && processingStatus && (
+          <div className="processing-progress" style={{ margin: "8px 0 0" }}>
+            <div className="progress-bar-track">
+              <div
+                className="progress-bar-fill"
+                style={{ width: `${Math.round((processingStatus.processed_files / processingStatus.total_files) * 100)}%` }}
+              />
+            </div>
+            <p className="progress-label">
+              {processingStatus.processed_files}/{processingStatus.total_files} files parsed — {processingStatus.total_pages} sections extracted
+            </p>
+          </div>
+        )}
       </section>
 
       {files.length > 0 && (
@@ -274,27 +349,66 @@ function UploadDashboardPage() {
                   configuration.
                 </p>
               </div>
-              <button
-                className="text-action"
-                onClick={clearFiles}
-                type="button"
-              >
-                Clear all
-              </button>
+              {!uploading && (
+                <button
+                  className="text-action"
+                  onClick={clearFiles}
+                  type="button"
+                >
+                  Clear all
+                </button>
+              )}
             </div>
 
             <div className="file-grid">
-              {files.map((file, index) => (
-                <div className="file-card" key={`${file.name}_${file.size}`}>
-                  <div>
-                    <strong>{file.name}</strong>
-                    <span>{formatSize(file.size)}</span>
+              {files.map((file, index) => {
+                // Determine per-file state during upload/parsing
+                const uploadPct = fileProgresses[index] ?? 0;
+                const parsedCount = processingStatus?.processed_files ?? 0;
+                const isParsed = uploading && processingStatus && index < parsedCount;
+                const isParsing = uploading && processingStatus && index === parsedCount;
+                const isUploading = uploading && !processingStatus;
+
+                return (
+                  <div
+                    className={`file-card ${uploading ? "file-card-active" : ""}`}
+                    key={`${file.name}_${file.size}`}
+                  >
+                    <div className="file-card-info">
+                      <strong>{file.name}</strong>
+                      <span>{formatSize(file.size)}</span>
+                    </div>
+
+                    {isUploading && (
+                      <div className="file-upload-bar-shell">
+                        <div
+                          className="file-upload-bar-fill"
+                          style={{ width: `${uploadPct}%` }}
+                        />
+                        <span className="file-upload-pct">{uploadPct}%</span>
+                      </div>
+                    )}
+
+                    {uploading && processingStatus && (
+                      <div className="file-upload-bar-shell">
+                        <div
+                          className={`file-upload-bar-fill ${isParsed ? "parsed" : isParsing ? "parsing" : "queued"}`}
+                          style={{ width: isParsed ? "100%" : isParsing ? "50%" : "4px" }}
+                        />
+                        <span className="file-upload-pct">
+                          {isParsed ? "✓ Done" : isParsing ? "Parsing…" : "Queued"}
+                        </span>
+                      </div>
+                    )}
+
+                    {!uploading && (
+                      <button onClick={() => removeFile(index)} type="button">
+                        Remove
+                      </button>
+                    )}
                   </div>
-                  <button onClick={() => removeFile(index)} type="button">
-                    Remove
-                  </button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </section>

@@ -1,10 +1,17 @@
 import React from "react";
 
-function typeLabel(type) {
-  if (type === "mcq") return "Multiple Choice Question";
-  if (type === "true_false") return "True / False Question";
-  if (type === "coding") return "Coding Question";
-  return "Short Answer Question";
+function typeBadgeClass(type) {
+  if (type === "mcq") return "mcq";
+  if (type === "true_false") return "tf";
+  if (type === "coding") return "coding";
+  return "sa";
+}
+
+function typeBadgeLabel(type) {
+  if (type === "mcq") return "MCQ";
+  if (type === "true_false") return "T / F";
+  if (type === "coding") return "Coding";
+  return "Short Answer";
 }
 
 function Question({
@@ -28,7 +35,9 @@ function Question({
             <div className="exam-question-index">{index + 1}</div>
             <div>
               <h2>{`Question ${index + 1}`}</h2>
-              <p>{typeLabel(type)}</p>
+              <span className={`question-type-badge type-${typeBadgeClass(type)}`}>
+                {typeBadgeLabel(type)}
+              </span>
             </div>
           </div>
           <button

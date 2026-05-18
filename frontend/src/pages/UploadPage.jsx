@@ -2,7 +2,7 @@ import React, { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:8000";
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:8010";
 const ALLOWED_EXTENSIONS = ["pdf", "pptx"];
 
 function UploadPage() {
@@ -12,6 +12,7 @@ function UploadPage() {
   const [dragging, setDragging] = useState(false);
   const [folderMode, setFolderMode] = useState(false);
   const [slowNotice, setSlowNotice] = useState(false);
+  const [processingStatus, setProcessingStatus] = useState(null);
   const fileInputRef = useRef();
   const folderInputRef = useRef();
   const navigate = useNavigate();
@@ -71,6 +72,7 @@ function UploadPage() {
     setUploading(true);
     setMessage(null);
     setSlowNotice(false);
+    setProcessingStatus(null);
 
     const formData = new FormData();
     files.forEach((file) => {
@@ -80,17 +82,26 @@ function UploadPage() {
     const slowTimer = setTimeout(() => setSlowNotice(true), 5000);
 
     try {
-      const response = await axios.post(`${API_URL}/upload`, formData, {
+      const { data } = await axios.post(`${API_URL}/upload`, formData, {
         headers: { "Content-Type": "multipart/form-data" },
-        timeout: 120000,
+        // Only needs time to save bytes — parsing is now async
+        timeout: 30000,
       });
 
-      setMessage({ type: "success", text: response.data.message });
+      clearTimeout(slowTimer);
+      setSlowNotice(false);
+      setMessage({ type: "info", text: "Files uploaded — parsing in background..." });
 
-      setTimeout(() => {
-        navigate(`/config/${response.data.document_id}`);
-      }, 1000);
+      const result = await pollProcessingStatus(data.document_id);
+
+      if (result.success) {
+        setMessage({ type: "success", text: `Ready! ${result.total_pages} sections extracted.` });
+        setTimeout(() => navigate(`/config/${data.document_id}`), 800);
+      } else {
+        setMessage({ type: "error", text: result.error || "Processing failed. Please try again." });
+      }
     } catch (err) {
+      clearTimeout(slowTimer);
       if (err.code === "ECONNABORTED") {
         setMessage({ type: "error", text: "Request timed out. The server may be starting up — please try again." });
       } else if (!err.response) {
@@ -103,7 +114,38 @@ function UploadPage() {
       clearTimeout(slowTimer);
       setUploading(false);
       setSlowNotice(false);
+      setProcessingStatus(null);
     }
+  };
+
+  const pollProcessingStatus = async (documentId) => {
+    const maxAttempts = 180; // 3-minute ceiling
+    for (let i = 0; i < maxAttempts; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      try {
+        const res = await axios.get(`${API_URL}/upload/${documentId}/status`, { timeout: 5000 });
+        const { status, processed_files, total_files, total_pages, error } = res.data;
+
+        if (status === "ready") {
+          setProcessingStatus(null);
+          return { success: true, total_pages };
+        }
+        if (status === "error") {
+          setProcessingStatus(null);
+          return { success: false, error: error || "Processing failed." };
+        }
+
+        // Still processing — update the progress display
+        setProcessingStatus({ processed_files, total_files, total_pages });
+        setMessage({
+          type: "info",
+          text: `Parsing files... ${processed_files}/${total_files} done, ${total_pages} sections so far`,
+        });
+      } catch (_) {
+        // Network blip — keep retrying
+      }
+    }
+    return { success: false, error: "Processing timed out after 3 minutes." };
   };
 
   const openPicker = () => {
@@ -195,7 +237,22 @@ function UploadPage() {
       >
         {uploading ? "Uploading..." : `Upload ${files.length || ""} Document${files.length !== 1 ? "s" : ""}`}
       </button>
-
+      {uploading && processingStatus && (
+        <div className="processing-progress">
+          <div className="progress-bar-track">
+            <div
+              className="progress-bar-fill"
+              style={{
+                width: `${Math.round((processingStatus.processed_files / processingStatus.total_files) * 100)}%`,
+              }}
+            />
+          </div>
+          <p className="progress-label">
+            {processingStatus.processed_files}/{processingStatus.total_files} files &mdash;{" "}
+            {processingStatus.total_pages} sections extracted
+          </p>
+        </div>
+      )}
       {uploading && slowNotice && (
         <div className="status-message info">
           Server is waking up — this may take up to a minute on first request.

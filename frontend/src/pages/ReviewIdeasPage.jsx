@@ -2,7 +2,75 @@ import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
 
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:8000";
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:8010";
+
+// ── Lightweight markdown → JSX renderer ─────────────────────────────────────
+function parseBold(str) {
+  return str.split(/\*\*(.+?)\*\*/).map((part, i) =>
+    i % 2 === 1 ? <strong key={i}>{part}</strong> : part,
+  );
+}
+
+function renderMarkdown(text) {
+  if (!text) return null;
+  const lines = text.split("\n");
+  const output = [];
+  let listItems = [];
+  let k = 0;
+
+  const flushList = () => {
+    if (listItems.length > 0) {
+      output.push(
+        <ul className="ideas-md-list" key={k++}>
+          {listItems}
+        </ul>,
+      );
+      listItems = [];
+    }
+  };
+
+  for (const line of lines) {
+    if (/^#{1,3} /.test(line)) {
+      flushList();
+      output.push(
+        <h3 className="ideas-md-heading" key={k++}>
+          {parseBold(line.replace(/^#{1,3} /, ""))}
+        </h3>,
+      );
+    } else if (/^[-*] /.test(line)) {
+      listItems.push(<li key={k++}>{parseBold(line.slice(2))}</li>);
+    } else if (line.trim() === "") {
+      flushList();
+    } else {
+      flushList();
+      output.push(
+        <p className="ideas-md-p" key={k++}>
+          {parseBold(line)}
+        </p>,
+      );
+    }
+  }
+  flushList();
+  return output;
+}
+
+function PencilIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15" aria-hidden="true">
+      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="15" height="15" aria-hidden="true">
+      <path d="m5 12 4 4L19 6" />
+    </svg>
+  );
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 function ReviewIdeasPage() {
   const { documentId } = useParams();
@@ -11,8 +79,7 @@ function ReviewIdeasPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [ideas, setIdeas] = useState("");
-  const [additionalReqs, setAdditionalReqs] = useState("");
-  const [proceeding, setProceeding] = useState(false);
+  const [editMode, setEditMode] = useState(false);
 
   useEffect(() => {
     const fetchIdeas = async () => {
@@ -43,19 +110,7 @@ function ReviewIdeasPage() {
     fetchIdeas();
   }, [documentId]);
 
-  const handleContinue = async () => {
-    setProceeding(true);
-    try {
-      if (additionalReqs.trim()) {
-        await axios.post(
-          `${API_URL}/requirements/${documentId}`,
-          { requirement: additionalReqs.trim() },
-          { timeout: 10000 },
-        );
-      }
-    } catch {
-      // Non-fatal — proceed anyway
-    }
+  const handleContinue = () => {
     navigate(`/config/${documentId}`);
   };
 
@@ -68,7 +123,7 @@ function ReviewIdeasPage() {
             <h1>Review Key Concepts</h1>
             <p>
               Gemini extracted the main ideas from your materials. Review them
-              below, then add any specific requirements before building your exam.
+              below, then continue to exam setup to configure your exam.
             </p>
           </div>
           <div className="config-header-actions">
@@ -81,11 +136,11 @@ function ReviewIdeasPage() {
             </button>
             <button
               className="primary-pill-button"
-              disabled={loading || proceeding}
+              disabled={loading}
               onClick={handleContinue}
               type="button"
             >
-              {proceeding ? "Saving..." : "Continue to Exam Setup →"}
+              Continue to Exam Setup →
             </button>
           </div>
         </div>
@@ -117,26 +172,38 @@ function ReviewIdeasPage() {
           <>
             <div className="ideas-section-label">
               <span className="eyebrow">Extracted Key Concepts</span>
-              <span className="ideas-meta-note">
-                {ideas.length.toLocaleString()} characters · read-only
-              </span>
-            </div>
-            <div className="ideas-readonly-block">
-              {ideas || <span className="ideas-empty-note">No concepts extracted.</span>}
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <span className="ideas-meta-note">
+                  {ideas.length.toLocaleString()} characters
+                </span>
+                <button
+                  className="ideas-edit-toggle"
+                  onClick={() => setEditMode((m) => !m)}
+                  title={editMode ? "Done editing" : "Edit content"}
+                  type="button"
+                >
+                  {editMode ? <CheckIcon /> : <PencilIcon />}
+                  {editMode ? "Done" : "Edit"}
+                </button>
+              </div>
             </div>
 
-            <div className="ideas-section-label" style={{ marginTop: 28 }}>
-              <span className="eyebrow">Additional Requirements</span>
-              <span className="ideas-meta-note">Optional — saved and applied to this exam</span>
-            </div>
-            <textarea
-              className="ideas-textarea"
-              value={additionalReqs}
-              onChange={(e) => setAdditionalReqs(e.target.value)}
-              rows={5}
-              spellCheck={false}
-              placeholder="e.g. Focus on Chapter 3 definitions, avoid questions on X, include at least one recursion question..."
-            />
+            {editMode ? (
+              <textarea
+                autoFocus
+                className="ideas-textarea"
+                onChange={(e) => setIdeas(e.target.value)}
+                rows={20}
+                spellCheck={false}
+                value={ideas}
+              />
+            ) : (
+              <div className="ideas-preview-pane">
+                {ideas
+                  ? renderMarkdown(ideas)
+                  : <span className="ideas-empty-note">No concepts extracted.</span>}
+              </div>
+            )}
           </>
         )}
       </section>
@@ -165,12 +232,12 @@ function ReviewIdeasPage() {
         </div>
 
         <div className="sidebar-card sidebar-card-primary">
-          <p className="sidebar-note-title">How requirements work</p>
+          <p className="sidebar-note-title">How it works</p>
           <ul className="plain-list">
-            <li>Requirements you enter here are saved and injected into the exam generation prompt.</li>
-            <li>After each exam, the Result Analyzer automatically appends improvement recommendations.</li>
-            <li>User feedback submitted after an exam is also appended.</li>
-            <li>All accumulated requirements are visible and clearable on the Config page.</li>
+            <li>Gemini reads your documents and extracts the key concepts covered.</li>
+            <li>Review the extraction — click the pencil icon to edit anything that looks off.</li>
+            <li>Additional requirements (e.g. coding questions, topic focus) can be added on the next Exam Setup page.</li>
+            <li>Result feedback from past exams is automatically applied to future generations.</li>
           </ul>
         </div>
 

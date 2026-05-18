@@ -4,7 +4,7 @@ import axios from "axios";
 import Timer from "../components/Timer";
 import Question from "../components/Question";
 
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:8000";
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:8010";
 
 function BookIcon() {
   return (
@@ -66,13 +66,6 @@ function XIcon() {
       <path d="M18 6 6 18" />
     </svg>
   );
-}
-
-function getQuestionTypeLabel(type) {
-  if (type === "mcq") return "Multiple Choice";
-  if (type === "true_false") return "True / False";
-  if (type === "coding") return "Coding";
-  return "Short Answer";
 }
 
 function getAnsweredCount(answers) {
@@ -140,10 +133,6 @@ function ExamStudioPage() {
       setError(null);
     }
   }, [examId, isDemo]);
-
-  const handleAnswer = (questionIndex, answer) => {
-    setAnswers((prev) => ({ ...prev, [questionIndex]: answer }));
-  };
 
   const toggleFlag = (questionIndex) => {
     setFlaggedQuestions((prev) =>
@@ -223,6 +212,20 @@ function ExamStudioPage() {
     () => buildProgressLabel(answeredCount, exam?.questions.length || 0),
     [answeredCount, exam],
   );
+
+  // Sort questions: MCQ + T/F first (mixed), coding second, SA last
+  const sortedQuestions = useMemo(() => {
+    if (!exam) return [];
+    const priority = { mcq: 0, true_false: 0, coding: 1, short_answer: 2 };
+    return exam.questions
+      .map((q, i) => ({ ...q, _originalIndex: i }))
+      .sort((a, b) => (priority[a.type] ?? 1) - (priority[b.type] ?? 1));
+  }, [exam]);
+
+  const handleAnswer = (displayIndex, answer) => {
+    const originalIndex = sortedQuestions[displayIndex]._originalIndex;
+    setAnswers((prev) => ({ ...prev, [originalIndex]: answer }));
+  };
 
   const handleExportJSON = useCallback(() => {
     if (!exam || !results) return;
@@ -445,9 +448,11 @@ function ExamStudioPage() {
                   </span>
                 </div>
 
-                <p className="review-kicker">{`Question ${detail.questionIndex + 1} • ${getQuestionTypeLabel(
-                  detail.type,
-                )}`}</p>
+                <p className="review-kicker">{`Question ${detail.questionIndex + 1}`}
+                  <span className={`question-type-badge type-${detail.type === "true_false" ? "tf" : detail.type === "short_answer" ? "sa" : detail.type === "coding" ? "coding" : "mcq"}`} style={{ marginLeft: 8 }}>
+                    {detail.type === "mcq" ? "MCQ" : detail.type === "true_false" ? "T / F" : detail.type === "coding" ? "Coding" : "Short Answer"}
+                  </span>
+                </p>
                 <h3>{detail.question}</h3>
                 {detail.codeSnippet && (
                   <pre className="exam-code-snippet review-code-snippet"><code>{detail.codeSnippet}</code></pre>
@@ -514,7 +519,7 @@ function ExamStudioPage() {
     );
   }
 
-  const question = exam.questions[currentIndex];
+  const question = sortedQuestions[currentIndex];
 
   return (
     <div className="exam-layout">
@@ -529,9 +534,9 @@ function ExamStudioPage() {
           </div>
 
           <div className="question-nav-grid">
-            {exam.questions.map((_, index) => {
+            {sortedQuestions.map((_, index) => {
               const isCurrent = index === currentIndex;
-              const isAnswered = Boolean(answers[index]);
+              const isAnswered = Boolean(answers[sortedQuestions[index]._originalIndex]);
               const isFlagged = flaggedQuestions.includes(index);
               const stateClass = isCurrent
                 ? "current"
@@ -600,7 +605,7 @@ function ExamStudioPage() {
         </div>
 
         <Question
-          answer={answers[currentIndex]}
+          answer={answers[sortedQuestions[currentIndex]?._originalIndex] || ""}
           index={currentIndex}
           isFlagged={flaggedQuestions.includes(currentIndex)}
           onAnswer={(value) => handleAnswer(currentIndex, value)}
@@ -620,10 +625,10 @@ function ExamStudioPage() {
             </button>
             <button
               className="gradient-pill-button"
-              disabled={currentIndex === exam.questions.length - 1}
+              disabled={currentIndex === sortedQuestions.length - 1}
               onClick={() =>
                 setCurrentIndex((prev) =>
-                  Math.min(prev + 1, exam.questions.length - 1),
+                  Math.min(prev + 1, sortedQuestions.length - 1),
                 )
               }
               type="button"

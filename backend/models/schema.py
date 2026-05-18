@@ -37,8 +37,19 @@ class ExamResponse(BaseModel):
 class UploadResponse(BaseModel):
     document_id: str
     filenames: list[str]
-    num_pages: int
+    status: str  # "processing" | "ready"
+    num_pages: int = 0
     message: str
+
+
+class UploadStatusResponse(BaseModel):
+    document_id: str
+    status: str              # "processing" | "ready" | "error"
+    processed_files: int
+    total_files: int
+    total_pages: int
+    filenames: list[str]
+    error: Optional[str] = None
 
 
 class DocumentContextResponse(BaseModel):

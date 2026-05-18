@@ -1,10 +1,14 @@
 import io
+import logging
 import os
 
 import pdfplumber
 import pypdfium2 as pdfium
 from PIL import Image
 from pptx import Presentation
+from tqdm import tqdm
+
+logger = logging.getLogger("exam_generator.parser")
 
 try:
     import pytesseract
@@ -51,12 +55,21 @@ def _render_pdf_page(page: pdfium.PdfPage, scale: float = 2.0) -> Image.Image:
         bitmap.close()
 
 
-def parse_pdf(file_path: str) -> list[dict]:
+def parse_pdf(file_path: str, filename: str = "") -> list[dict]:
     """Extract text from each PDF page using pdfplumber, with Tesseract OCR fallback."""
+    label = filename or os.path.basename(file_path)
+    logger.info("Parsing PDF: %s", label)
     pages = []
 
     with pdfplumber.open(file_path) as pdf, pdfium.PdfDocument(file_path) as pdf_doc:
-        for i, page in enumerate(pdf.pages):
+        page_iter = tqdm(
+            pdf.pages,
+            desc=f"  {label}",
+            unit="pg",
+            leave=False,
+            dynamic_ncols=True,
+        )
+        for i, page in enumerate(page_iter):
             raw_text = (page.extract_text() or "").strip()
 
             blocks = []
@@ -86,15 +99,25 @@ def parse_pdf(file_path: str) -> list[dict]:
                     "extraction_method": extraction_method,
                 })
 
+    logger.info("PDF %s — %d page(s) extracted", label, len(pages))
     return pages
 
 
-def parse_pptx(file_path: str) -> list[dict]:
+def parse_pptx(file_path: str, filename: str = "") -> list[dict]:
     """Extract text from each PPTX slide using python-pptx, with Tesseract OCR on embedded images."""
+    label = filename or os.path.basename(file_path)
+    logger.info("Parsing PPTX: %s", label)
     prs = Presentation(file_path)
     slides = []
 
-    for i, slide in enumerate(prs.slides):
+    slide_iter = tqdm(
+        prs.slides,
+        desc=f"  {label}",
+        unit="slide",
+        leave=False,
+        dynamic_ncols=True,
+    )
+    for i, slide in enumerate(slide_iter):
         text_blocks = []
         embedded_images = []
 
@@ -151,6 +174,7 @@ def parse_pptx(file_path: str) -> list[dict]:
                 "extraction_method": extraction_method,
             })
 
+    logger.info("PPTX %s — %d slide(s) extracted", label, len(slides))
     return slides
 
 
@@ -158,8 +182,8 @@ def parse_file(file_path: str, filename: str) -> list[dict]:
     """Route to the correct parser based on file extension."""
     ext = filename.lower().rsplit(".", 1)[-1]
     if ext == "pdf":
-        return parse_pdf(file_path)
+        return parse_pdf(file_path, filename)
     elif ext == "pptx":
-        return parse_pptx(file_path)
+        return parse_pptx(file_path, filename)
     else:
         raise ValueError(f"Unsupported file type: {ext}")

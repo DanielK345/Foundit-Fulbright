@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
 
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:8000";
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:8010";
 
 function ConfigStudioPage() {
   const { documentId } = useParams();
@@ -13,23 +13,21 @@ function ConfigStudioPage() {
   const [slowNotice, setSlowNotice] = useState(false);
   const [requirements, setRequirements] = useState([]);
   const [clearingReqs, setClearingReqs] = useState(false);
+  const [additionalReq, setAdditionalReq] = useState("");
   const [config, setConfig] = useState({
     time_limit: 30,
     mcq: 5,
     true_false: 3,
     short_answer: 2,
-    coding: 2,
     difficulty: "medium",
-    focus: "",
   });
 
   const totalQuestions = useMemo(
     () =>
       Number(config.mcq) +
       Number(config.true_false) +
-      Number(config.short_answer) +
-      Number(config.coding),
-    [config.mcq, config.true_false, config.short_answer, config.coding],
+      Number(config.short_answer),
+    [config.mcq, config.true_false, config.short_answer],
   );
 
   const handleChange = (field, value) => {
@@ -64,6 +62,19 @@ function ConfigStudioPage() {
       return;
     }
 
+    // Persist any new requirements before generating
+    if (additionalReq.trim()) {
+      try {
+        await axios.post(
+          `${API_URL}/requirements/${documentId}`,
+          { requirement: additionalReq.trim() },
+          { timeout: 10000 },
+        );
+      } catch {
+        // Non-fatal — proceed anyway
+      }
+    }
+
     setLoading(true);
     setError(null);
     setSlowNotice(false);
@@ -77,9 +88,9 @@ function ConfigStudioPage() {
         mcq: parseInt(config.mcq, 10),
         true_false: parseInt(config.true_false, 10),
         short_answer: parseInt(config.short_answer, 10),
-        coding: parseInt(config.coding, 10),
+        coding: 0,
         time_limit: parseInt(config.time_limit, 10),
-        focus: config.focus || null,
+        focus: null,
       };
 
       const response = await axios.post(`${API_URL}/generate`, payload, {
@@ -218,24 +229,13 @@ function ConfigStudioPage() {
             />
           </label>
 
-          <label className="config-field">
-            <span>Coding</span>
-            <input
-              max="10"
-              min="0"
-              onChange={(event) => handleChange("coding", event.target.value)}
-              type="number"
-              value={config.coding}
-            />
-          </label>
-
           <label className="config-field config-field-full">
-            <span>Focus Area</span>
+            <span>Additional Requirements</span>
             <textarea
-              onChange={(event) => handleChange("focus", event.target.value)}
-              placeholder="Examples: chapters 2 and 3, machine learning basics, quantum wavefunctions..."
-              rows="4"
-              value={config.focus}
+              onChange={(event) => setAdditionalReq(event.target.value)}
+              placeholder={`e.g. Add 2 coding questions about pointer arithmetic and recursion… Focus only on Chapter 5 — binary trees… Avoid questions about sorting algorithms… Include at least one question on dynamic programming`}
+              rows={4}
+              value={additionalReq}
             />
           </label>
         </div>
@@ -267,10 +267,6 @@ function ConfigStudioPage() {
           <div className="breakdown-card">
             <strong>{config.short_answer}</strong>
             <span>Short Answer</span>
-          </div>
-          <div className="breakdown-card">
-            <strong>{config.coding}</strong>
-            <span>Coding</span>
           </div>
         </div>
 

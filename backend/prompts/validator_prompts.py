@@ -29,10 +29,6 @@ Output contract:
 }
 Every input question must have exactly one verdict entry."""
 
-# ---------------------------------------------------------------------------
-# Batch prompt template — {questions_block} is filled at runtime
-# ---------------------------------------------------------------------------
-
 VALIDATOR_BATCH_PROMPT = """\
 Evaluate each exam question below against the criteria for its type.
 
@@ -49,6 +45,10 @@ Evaluate each exam question below against the criteria for its type.
 • Absolute qualifiers ("always", "never", "all", "none") that trivially give
   away the answer are a quality failure.
 • Statements that are matters of opinion or interpretation must be flagged.
+• Statements that only test knowledge of an analogy, story, or metaphor
+  (e.g., "The Too Much Milk problem involves two roommates") without requiring
+  any actual subject-matter knowledge must be flagged — the question must test
+  the underlying concept the analogy illustrates, not the story itself.
 
 ━━━ SHORT ANSWER CRITERIA ━━━
 • The question must demand a descriptive answer: a term, concept, name, or

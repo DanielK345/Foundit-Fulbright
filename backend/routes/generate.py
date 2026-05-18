@@ -40,13 +40,15 @@ async def generate_exam(config: ExamConfig):
     if not all_chunks:
         raise HTTPException(status_code=400, detail="No text content found in the document.")
 
-    # Two-stage BM25 retrieval for long documents.
-    # Short documents (slides, notes ≤ 15 pages) still get full context —
-    # Gemini's 1M-token window handles them well and fragmentation hurts quality.
+    # Two-stage BM25 retrieval for very large documents (> 200 pages).
+    # Most lecture sets are under the threshold and get full context —
+    # BM25 only activates for textbooks / large reading packs.
+    # When retrieval is needed, prefer user focus → stored main_ideas → stratified fallback.
     if should_use_retrieval(all_chunks):
+        ideas_text = doc.get("ideas", "")
         exam_chunks = retrieve_chunks(
             pages=all_chunks,
-            focus_text=config.focus,
+            focus_text=config.focus or ideas_text or None,
         )
     else:
         exam_chunks = all_chunks

@@ -2,7 +2,6 @@ fastapi==0.115.0
 uvicorn==0.30.6
 python-multipart==0.0.9
 google-generativeai==0.8.3
-faiss-cpu>=1.12.0,<1.14.0
 numpy>=1.26,<3.0
 pdfplumber==0.11.4
 pypdfium2==5.7.0
@@ -12,5 +11,5 @@ pytesseract==0.3.13
 python-dotenv==1.0.1
 pydantic==2.9.2
 pytest==8.3.3
-python-docx==0.8.11
 rank-bm25==0.2.2
+tqdm>=4.66,<5.0

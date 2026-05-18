@@ -7,10 +7,6 @@ Exported constants:
     {feedback_section})
 """
 
-# ---------------------------------------------------------------------------
-# Main generation prompt
-# ---------------------------------------------------------------------------
-
 GENERATOR_PROMPT_TEMPLATE = """\
 You are an expert quiz creator with years of experience in educational assessment and instructional design.
 
@@ -62,6 +58,18 @@ Follow these general principles when generating questions:
 4. Clear language: Use precise, unambiguous wording that focuses on key concepts
 5. Plausible options: For multiple choice, all distractors should be realistic and based on common misconceptions
 6. Learning value: Each question should reinforce important concepts from the content
+7. BROAD COVERAGE & ANTI-REPETITION (CRITICAL — enforce strictly):
+   a. Before writing any question, mentally enumerate every distinct major concept/topic present in the content.
+   b. Assign at most ONE question per distinct concept across the ENTIRE exam — this applies across all question types combined. If you already have an MCQ about "mutex locks", you may NOT also write a T/F or short-answer about mutex locks.
+   c. If the content covers N topics and you need M questions where M ≤ N, choose M different topics with no overlap. If M > N, only then may a topic appear in two questions, and they must test different cognitive levels (e.g., recall vs. application).
+   d. "Thread synchronization", "thread creation", and "thread scheduling" are THREE separate concepts — do not collapse them. Similarly, "semaphore" and "mutex" are distinct even though both are synchronization primitives.
+   e. After drafting all questions, scan for concept overlap and replace any duplicate-concept question with one on a topic not yet covered.
+8. TEST OS CONCEPTS DIRECTLY — NOT ANALOGIES OR METAPHORS:
+   - The content may use real-world analogies (e.g., "Too Much Milk", "Dining Philosophers as a restaurant scenario") to illustrate an OS concept. Do NOT write questions that test the analogy story itself.
+   - WRONG: "What does the 'Too Much Milk' problem illustrate?" — tests the wrapper, not the concept
+   - WRONG: "In the Dining Philosophers analogy, what do the forks represent?" — tests the metaphor
+   - RIGHT: Ask about the underlying OS concept directly: "What is a race condition?", "Why is mutual exclusion necessary?", "What property must a correct critical section protocol satisfy?"
+   - The analogy exists only to build intuition — test the actual OS mechanism.
 
 GUIDELINES FOR MCQ:
 - Generate exactly 4 options (A, B, C, D)
@@ -87,10 +95,16 @@ GUIDELINES FOR SHORT ANSWER:
 - Focus on key terms, concepts, or specific values that demonstrate understanding
 
 GUIDELINES FOR CODING:
-- Each coding question MUST include a code_snippet field with actual runnable code relevant to the material
-- Coding questions can be MCQ-style (with options A/B/C/D) OR short-answer style (options: null)
-- Ask about output, behavior, bugs, or what a function returns
-- If output is non-deterministic or depends on runtime conditions, prefer MCQ-style with options describing possible behaviors
+- Coding questions are ONLY appropriate when the source material contains ACTUAL code examples, pseudocode, system call sequences, or algorithm implementations directly related to the topic being taught. If the content has no relevant code, set your coding output to 0 and redistribute those questions as short_answer.
+- The code_snippet MUST be adapted from code, pseudocode, or a system-call sequence that appears in the source material. Do NOT invent generic standalone code (e.g., "int y = 10; y = y * 2;") that has no connection to the course topic.
+- OS-appropriate coding question subjects: system call usage (fork, exec, wait, pthread_create, sem_wait, mutex_lock, etc.), synchronization primitive sequences (lock/unlock, P/V), process/thread creation patterns, scheduling algorithm pseudocode, or memory-management function calls — all taken from the source material.
+- FORBIDDEN coding question patterns (these fail quality — do not generate them):
+    * Generic arithmetic or variable manipulation: "int y = 10; y = y * 2; printf..." — tests zero OS knowledge
+    * Basic type casting, string operations, or syntax trivia unrelated to an OS concept
+    * Any snippet you could not directly trace back to the uploaded course material
+    * Duplicating the same code or concept across two coding questions
+- For code with non-deterministic output (race conditions, concurrent access): use MCQ-style options that describe each plausible behavior AND explain the OS reason (e.g., "A) always 20, B) could be 10 or 20 due to a race condition on the shared variable").
+- Each coding question must test a DIFFERENT OS concept from every other coding question.
 
 CRITICAL: Ensure correct data types for the 'answer' field:
 - MCQ: STRING letter ("A", "B", "C", or "D")
@@ -105,6 +119,10 @@ ADDITIONAL REQUIREMENTS:
 - Include the source (slide number or page number) where the answer can be found in the 'source' field; if the answer comes from "Page 5:" in the text, set source: "page_5"
 - You must speak STRICTLY in the same language as the content provided; if there are different languages in the content, prioritize the language that appears most
 {feedback_section}
+SELF-CHECK BEFORE OUTPUTTING (mandatory):
+1. List every concept tested across all your questions. If any concept appears more than once, replace the duplicate with a question on a different topic.
+2. For each coding question: can you point to the exact line in the source material where the code or pseudocode came from? If not, replace it with a short_answer question.
+3. For each true/false question: does it test an OS mechanism directly, or does it only test knowledge of a story/analogy? If the latter, rewrite it to test the underlying concept.
 OUTPUT (strict JSON only, no extra text):
 {{
   "questions": [

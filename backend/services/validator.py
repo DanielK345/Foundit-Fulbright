@@ -1,6 +1,29 @@
 import re
 from difflib import SequenceMatcher
 
+# ---------------------------------------------------------------------------
+# Common English stop words — filtered out before any similarity comparison
+# so that shared filler words don't inflate Jaccard scores.
+# ---------------------------------------------------------------------------
+
+_STOP_WORDS: frozenset[str] = frozenset({
+    "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
+    "have", "has", "had", "do", "does", "did", "will", "would", "could",
+    "should", "may", "might", "must", "shall", "can", "need", "ought",
+    "of", "in", "on", "at", "to", "for", "with", "by", "from", "up",
+    "about", "into", "through", "before", "after", "above", "below",
+    "between", "that", "this", "these", "those", "it", "its", "what",
+    "which", "who", "when", "where", "why", "how", "all", "both", "each",
+    "every", "not", "no", "nor", "so", "yet", "or", "and", "but", "if",
+    "than", "because", "as", "until", "while", "although", "however",
+    "therefore", "following", "such", "used", "use", "using", "also",
+    "following", "given", "provides", "provide", "called", "known",
+    "defined", "refers", "means", "mean", "way", "type", "types",
+    "one", "two", "three", "four", "five", "following", "example",
+    "true", "false", "correct", "answer", "question", "describe",
+    "explain", "following", "statement", "term", "concept",
+})
+
 
 # ---------------------------------------------------------------------------
 # Text utilities
@@ -14,6 +37,40 @@ def _normalize(text: str) -> str:
 def _words(text: str) -> set[str]:
     """Return the set of lowercase alphanumeric tokens in a string."""
     return set(re.findall(r"[a-zA-Z0-9]+", text.lower()))
+
+
+def _content_words(text: str) -> set[str]:
+    """
+    Lowercase alphanumeric tokens with stop words removed.
+    These are the semantically meaningful tokens used for concept-level
+    similarity comparisons — domain-agnostic by design.
+    """
+    return _words(text) - _STOP_WORDS
+
+
+def _code_snippet_grounded(code: str, context_chunks: list[dict]) -> bool:
+    """
+    Return True if the code snippet shares enough tokens with the source
+    material to indicate it was adapted from the content rather than invented.
+
+    Code is syntactically denser than prose, so a 20% token-overlap threshold
+    is used (vs 50% for prose answers).  Snippets with ≤ 5 unique tokens are
+    too short to judge and are passed.
+
+    This check is domain-agnostic: a snippet from any subject (OS, compilers,
+    algorithms, biology pseudocode …) must leave a footprint in the source.
+    """
+    code_words = _content_words(code)
+    if len(code_words) <= 5:
+        return True  # too short to assess reliably
+
+    for chunk in context_chunks:
+        chunk_words = _content_words(chunk.get("content", ""))
+        overlap = len(code_words & chunk_words) / len(code_words)
+        if overlap >= 0.20:
+            return True
+
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -71,7 +128,9 @@ def _answer_grounded(question: dict, context_chunks: list[dict]) -> bool:
 
     MCQ         → check the correct option's full text (not just the letter)
     short_answer → check the expected answer text
-    true_false / coding → always pass (answers are "True"/"False" or computed)
+    coding      → check that the code snippet shares tokens with the source
+                  material (catches invented snippets unrelated to the content)
+    true_false  → always pass (statement is self-contained)
     """
     qtype = question.get("type", "")
 
@@ -84,7 +143,13 @@ def _answer_grounded(question: dict, context_chunks: list[dict]) -> bool:
     if qtype == "short_answer":
         return _text_in_context(question.get("answer", ""), context_chunks)
 
-    return True  # true_false, coding
+    if qtype == "coding":
+        snippet = question.get("code_snippet", "")
+        if snippet:
+            return _code_snippet_grounded(snippet, context_chunks)
+        return True
+
+    return True  # true_false
 
 
 # ---------------------------------------------------------------------------
@@ -153,14 +218,48 @@ def _is_valid_structure(question: dict) -> bool:
 
 def _is_duplicate(question: dict, existing: list[dict]) -> bool:
     """
-    Return True if the question text is ≥ 75 % similar (SequenceMatcher) to
-    any already-accepted question.
+    Two-tier, domain-agnostic duplicate detection.
+
+    Tier 1 — Surface text similarity (SequenceMatcher ≥ 0.75 on question text):
+        Fast check that catches nearly-identical or lightly reworded questions.
+
+    Tier 2 — Content-word Jaccard on question + answer + explanation (≥ 0.50):
+        Catches questions that test the same underlying concept even when the
+        surface phrasing is different.  Stop words are stripped before comparison
+        so shared filler ("the", "is", "a") does not inflate the score.
+
+        The explanation field is the strongest signal — the model's own
+        explanation of why an answer is correct is a direct description of the
+        concept being tested, making it ideal for topic-level deduplication.
+
+        Requires ≥ 6 content words on both sides to avoid false positives on
+        very short questions.
     """
-    q_norm = _normalize(question["question"])
+    q_text = _normalize(question["question"])
+    q_rich = _content_words(
+        f"{question.get('question', '')} "
+        f"{question.get('answer', '')} "
+        f"{question.get('explanation', '')}"
+    )
+
     for eq in existing:
-        ratio = SequenceMatcher(None, q_norm, _normalize(eq["question"])).ratio()
-        if ratio > 0.75:
+        # Tier 1: surface similarity on question text
+        if SequenceMatcher(None, q_text, _normalize(eq["question"])).ratio() > 0.75:
             return True
+
+        # Tier 2: concept-level Jaccard (domain-agnostic)
+        if len(q_rich) >= 6:
+            eq_rich = _content_words(
+                f"{eq.get('question', '')} "
+                f"{eq.get('answer', '')} "
+                f"{eq.get('explanation', '')}"
+            )
+            if len(eq_rich) >= 6:
+                union = q_rich | eq_rich
+                jaccard = len(q_rich & eq_rich) / len(union)
+                if jaccard >= 0.50:
+                    return True
+
     return False
 
 

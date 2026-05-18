@@ -1,24 +1,25 @@
 """
 Two-Stage BM25 Retrieval Service
 
-For long documents (textbooks, homework sets, external readings) this service
-avoids sending the entire document to the LLM by selecting only the most
-relevant chunks.
+Only activates for documents exceeding FULL_CONTEXT_THRESHOLD pages (default: 200).
+Typical lecture sets fit under the threshold and receive full context.
 
-Stage 1 — Structural pass:
-    Always include pages that contain numbered problems / exercises so that
-    homework-style exam questions are never missed.
+For large documents (textbooks, comprehensive reading packs) two strategies apply:
 
-Stage 2 — BM25 topic pass:
-    Topics are extracted from the content summarizer output (or the user's
-    focus text) and used as BM25 queries. Top-k chunks per topic are merged
-    and deduplicated.
+Strategy A — Topic-guided (preferred):
+    When `focus_text` is provided (user focus field or stored main_ideas from the
+    review step), topics are extracted from it and used as BM25 queries.
+    Top-k chunks per topic are merged and deduplicated.
 
-For short documents (≤ FULL_CONTEXT_THRESHOLD pages) the caller should send
-the full context directly — this service is only for long-form material.
+Strategy B — Source-stratified (fallback when no focus_text):
+    Divide the budget equally across source files so every uploaded file
+    contributes proportionally to the context.  Within each file, BM25 ranks
+    chunks by generic informativeness and the top-k are selected.
+    This prevents any single file from dominating the context window.
 """
 
 import re
+from collections import defaultdict
 from rank_bm25 import BM25Okapi
 from config import (
     BM25_FULL_CONTEXT_THRESHOLD as FULL_CONTEXT_THRESHOLD,
@@ -33,12 +34,13 @@ _HW_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
-# Broad fallback queries when no focus text is available.
-_DEFAULT_QUERIES = [
-    "key concept definition theorem",
-    "important formula algorithm equation",
-    "example application method",
-    "procedure step process",
+# Generic informativeness queries used within each file for source-stratified mode.
+# These are intentionally broad so BM25 ranks by content density, not topic bias.
+_INFORMATIVENESS_QUERIES = [
+    "definition concept key term",
+    "algorithm process method steps",
+    "example illustration case",
+    "formula equation property rule",
 ]
 
 
@@ -99,62 +101,135 @@ def retrieve_chunks(
     """
     Return the most relevant pages for exam generation.
 
-    Parameters
-    ----------
-    pages:
-        The original parsed pages (before any user edits).
-    focus_text:
-        Text from the content summarizer or user's focus field.
-        Used to extract BM25 query topics.
-    top_k_per_topic:
-        How many chunks to pull per query topic.
-    max_total:
-        Hard cap on the total number of chunks returned.
+    When `focus_text` is provided → topic-guided BM25 (Strategy A).
+    When `focus_text` is absent  → source-stratified selection (Strategy B).
 
-    Returns
-    -------
-    A deduplicated, source-order-sorted list of relevant chunks, or the
-    original pages list if retrieval yields too few results (fallback).
+    In both cases:
+    - Pages matching homework/exercise patterns are always included first.
+    - Results are capped at `max_total` and returned in original reading order.
+    - Falls back to the full page list if retrieval yields too few results.
     """
     if not pages:
         return pages
 
-    corpus = [_tokenize(p.get("content", "")) for p in pages]
-    bm25 = BM25Okapi(corpus)
-
     seen: set[int] = set()
     selected: list[dict] = []
 
-    # ── Stage 1: structural homework / exercise detection ──────────────────
+    # ── Stage 1: always include exercise / homework pages ─────────────────
     for i, page in enumerate(pages):
         if _HW_PATTERN.search(page.get("content", "")):
             seen.add(i)
             selected.append(page)
 
-    # ── Stage 2: BM25 per topic ────────────────────────────────────────────
-    topics = _extract_topics(focus_text or "") or _DEFAULT_QUERIES
+    remaining_budget = max_total - len(selected)
+    if remaining_budget <= 0:
+        return _restore_order(selected, pages)[:max_total]
+
+    # ── Stage 2: topic-guided vs source-stratified ────────────────────────
+    topics = _extract_topics(focus_text or "")
+
+    if topics:
+        # Strategy A: BM25 queries from focus text / stored ideas
+        selected += _topic_guided(pages, seen, topics, top_k_per_topic, remaining_budget)
+    else:
+        # Strategy B: proportional per-file selection
+        selected += _source_stratified(pages, seen, remaining_budget)
+
+    # ── Fallback ──────────────────────────────────────────────────────────
+    if len(selected) < MIN_RETRIEVAL_CHUNKS:
+        return pages
+
+    return _restore_order(selected, pages)[:max_total]
+
+
+def _topic_guided(
+    pages: list[dict],
+    seen: set[int],
+    topics: list[str],
+    top_k_per_topic: int,
+    budget: int,
+) -> list[dict]:
+    """BM25 retrieval driven by extracted topic queries."""
+    corpus = [_tokenize(p.get("content", "")) for p in pages]
+    bm25 = BM25Okapi(corpus)
+    result: list[dict] = []
 
     for topic in topics:
         query_tokens = _tokenize(topic)
         if not query_tokens:
             continue
-
         scores = bm25.get_scores(query_tokens)
-        # Sort indices by descending score; only keep chunks with a positive score.
+        added = 0
         for idx in scores.argsort()[::-1]:
-            if len(selected) - len(seen) >= top_k_per_topic:
+            if added >= top_k_per_topic or len(result) >= budget:
                 break
             idx = int(idx)
             if idx not in seen and scores[idx] > 0:
                 seen.add(idx)
-                selected.append(pages[idx])
+                result.append(pages[idx])
+                added += 1
 
-    # ── Fallback: too few results → return all pages ───────────────────────
-    if len(selected) < MIN_RETRIEVAL_CHUNKS:
-        return pages
+    return result
 
-    # Restore reading order so the LLM sees content sequentially.
+
+def _source_stratified(
+    pages: list[dict],
+    seen: set[int],
+    budget: int,
+) -> list[dict]:
+    """
+    Divide `budget` equally across source files, then within each file
+    rank pages by BM25 informativeness and take the top allocation.
+
+    This guarantees every uploaded file contributes to the context regardless
+    of how BM25 scores compare across files — preventing topic bias.
+    """
+    # Group unseen pages by source file
+    groups: dict[str, list[tuple[int, dict]]] = defaultdict(list)
+    for i, page in enumerate(pages):
+        if i not in seen:
+            key = page.get("filename") or page.get("source_label", "unknown")
+            groups[key].append((i, page))
+
+    if not groups:
+        return []
+
+    per_file = max(1, budget // len(groups))
+    result: list[dict] = []
+
+    for filename, indexed_pages in groups.items():
+        file_pages = [p for _, p in indexed_pages]
+        corpus = [_tokenize(p.get("content", "")) for p in file_pages]
+
+        if not any(corpus):
+            continue
+
+        bm25_file = BM25Okapi(corpus)
+        # Score each page against all informativeness queries combined
+        combined_scores = [0.0] * len(file_pages)
+        for q in _INFORMATIVENESS_QUERIES:
+            qtokens = _tokenize(q)
+            if qtokens:
+                scores = bm25_file.get_scores(qtokens)
+                for j, s in enumerate(scores):
+                    combined_scores[j] += s
+
+        # Take top `per_file` by combined score
+        ranked = sorted(range(len(file_pages)), key=lambda j: combined_scores[j], reverse=True)
+        added = 0
+        for j in ranked:
+            if added >= per_file:
+                break
+            orig_idx, page = indexed_pages[j]
+            if orig_idx not in seen:
+                seen.add(orig_idx)
+                result.append(page)
+                added += 1
+
+    return result
+
+
+def _restore_order(selected: list[dict], pages: list[dict]) -> list[dict]:
+    """Sort selected pages back into their original reading order."""
     page_order = {id(p): i for i, p in enumerate(pages)}
-    selected.sort(key=lambda p: page_order.get(id(p), 0))
-
-    return selected[:max_total]
+    return sorted(selected, key=lambda p: page_order.get(id(p), 0))

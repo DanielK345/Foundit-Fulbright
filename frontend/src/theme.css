@@ -949,9 +949,65 @@ a {
 
 .file-card {
   display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.file-card-info {
+  display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.file-card-active {
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+/* Per-file upload / parse progress bar */
+.file-upload-bar-shell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.file-upload-bar-fill {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #3b82f6, #6366f1);
+  transition: width 0.3s ease;
+  min-width: 4px;
+}
+
+.file-upload-bar-fill.parsed {
+  background: #22c55e;
+}
+
+.file-upload-bar-fill.parsing {
+  background: linear-gradient(90deg, #f59e0b, #f97316);
+  animation: bar-pulse 1s ease-in-out infinite;
+}
+
+.file-upload-bar-fill.queued {
+  background: #cbd5e1;
+}
+
+@keyframes bar-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.55; }
+}
+
+.file-upload-pct {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #64748b;
+  white-space: nowrap;
+  min-width: 52px;
+  text-align: right;
 }
 
 .context-card {
@@ -960,7 +1016,13 @@ a {
 
 .file-card strong {
   display: block;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
+}
+
+.file-card-info span {
+  font-size: 0.78rem;
+  color: var(--text-soft);
+  white-space: nowrap;
 }
 
 .context-card strong {
@@ -975,7 +1037,8 @@ a {
 }
 
 .file-card button {
-  padding: 10px 14px;
+  align-self: flex-end;
+  padding: 6px 12px;
   border: 0;
   border-radius: 999px;
   background: rgba(213, 61, 61, 0.1);
