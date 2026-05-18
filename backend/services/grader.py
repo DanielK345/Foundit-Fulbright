@@ -3,32 +3,11 @@ import json
 import numpy as np
 import google.generativeai as genai
 from services.embedder import embed_query
+from prompts.grader_prompts import LLM_GRADING_PROMPT
 
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
-# Stage 2 LLM prompt — used ONLY when similarity is inconclusive
-LLM_GRADING_PROMPT = """You are a strict exam grader.
-
-QUESTION:
-{question}
-
-REFERENCE ANSWER:
-{reference}
-
-STUDENT ANSWER:
-{student}
-
-GRADING RULES:
-- Grade based ONLY on correctness relative to reference
-- Accept paraphrasing if meaning is equivalent
-- Do NOT give credit for partially correct answers unless specified
-- Be strict and objective
-
-OUTPUT FORMAT:
-{{
-  "score": 0 or 1,
-  "reason": "short explanation"
-}}"""
+# Prompt moved to prompts/grader_prompts.py
 
 # Similarity thresholds
 SIM_CORRECT_THRESHOLD = 0.85

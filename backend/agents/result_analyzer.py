@@ -8,28 +8,11 @@ automatically injected as Additional Requirements in the next exam generation.
 
 import os
 import google.generativeai as genai
+from prompts.analyzer_prompts import ANALYZER_PROMPT
 
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
-ANALYZER_PROMPT = """You are an expert educational analyst. Review these exam results and \
-produce specific, actionable recommendations to improve the next exam generated for this student.
-
-RESULTS:
-{results_summary}
-
----
-
-TASK: Analyze the results and recommend adjustments for the next exam.
-
-GUIDELINES:
-- Identify topics/concepts where the student struggled (based on wrong answers and sources)
-- Recommend specific question type changes (e.g. "Add 3 more coding questions on recursion", \
-"Replace true/false on Chapter 2 with MCQ")
-- If the student aced an area, suggest raising difficulty or adding trickier questions there
-- Keep recommendations specific and actionable — 4 to 7 bullet points
-- Do NOT include any preamble or intro line — output bullet points directly
-
-Output only the bullet-point recommendations."""
+# Prompt moved to prompts/analyzer_prompts.py
 
 
 def analyze_results(details: list[dict]) -> str:
