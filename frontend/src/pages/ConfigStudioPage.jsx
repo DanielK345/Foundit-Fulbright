@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
 
@@ -11,6 +11,8 @@ function ConfigStudioPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [slowNotice, setSlowNotice] = useState(false);
+  const [requirements, setRequirements] = useState([]);
+  const [clearingReqs, setClearingReqs] = useState(false);
   const [config, setConfig] = useState({
     time_limit: 30,
     mcq: 5,
@@ -32,6 +34,26 @@ function ConfigStudioPage() {
 
   const handleChange = (field, value) => {
     setConfig((prev) => ({ ...prev, [field]: value }));
+  };
+
+  useEffect(() => {
+    if (isDemo) return;
+    axios
+      .get(`${API_URL}/requirements/${documentId}`, { timeout: 10000 })
+      .then((res) => setRequirements(res.data.requirements || []))
+      .catch(() => {});
+  }, [documentId, isDemo]);
+
+  const handleClearRequirements = async () => {
+    setClearingReqs(true);
+    try {
+      await axios.delete(`${API_URL}/requirements/${documentId}`, { timeout: 10000 });
+      setRequirements([]);
+    } catch {
+      // Non-fatal
+    } finally {
+      setClearingReqs(false);
+    }
   };
 
   const handleGenerate = async () => {
@@ -267,6 +289,34 @@ function ConfigStudioPage() {
               sets.
             </li>
           </ul>
+        </div>
+
+        <div className="sidebar-card">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <p className="sidebar-note-title" style={{ margin: 0 }}>Additional Requirements</p>
+            {requirements.length > 0 && (
+              <button
+                className="secondary-outline-button"
+                disabled={clearingReqs}
+                onClick={handleClearRequirements}
+                style={{ fontSize: "0.75rem", padding: "2px 10px" }}
+                type="button"
+              >
+                {clearingReqs ? "Clearing..." : "Clear"}
+              </button>
+            )}
+          </div>
+          {requirements.length === 0 ? (
+            <p style={{ fontSize: "0.82rem", color: "#94a3b8", margin: 0 }}>
+              None yet — feedback and result analysis from previous exams will appear here and be applied automatically.
+            </p>
+          ) : (
+            <ul className="plain-list" style={{ fontSize: "0.82rem" }}>
+              {requirements.map((req, i) => (
+                <li key={i} style={{ marginBottom: 6, color: "#334155" }}>{req}</li>
+              ))}
+            </ul>
+          )}
         </div>
 
         <div className="sidebar-card">

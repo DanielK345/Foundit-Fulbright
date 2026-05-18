@@ -91,6 +91,7 @@ function ExamStudioPage() {
   const navigate = useNavigate();
   const isDemo = examId === "demo";
   const [exam, setExam] = useState(null);
+  const [documentId, setDocumentId] = useState(null);
   const [answers, setAnswers] = useState({});
   const [submitted, setSubmitted] = useState(false);
   const [results, setResults] = useState(null);
@@ -114,6 +115,7 @@ function ExamStudioPage() {
           timeout: 120000,
         });
         setExam(response.data);
+        setDocumentId(response.data.document_id || null);
       } catch (requestError) {
         if (requestError.code === "ECONNABORTED") {
           setError("Loading timed out while the backend was waking up.");
@@ -189,6 +191,10 @@ function ExamStudioPage() {
         })),
       });
       setSubmitted(true);
+      // Fire-and-forget: run result analysis to improve the next exam
+      axios
+        .post(`${API_URL}/exam/${examId}/analyze`, { details: data.details }, { timeout: 30000 })
+        .catch(() => {});
     } catch (requestError) {
       if (requestError.code === "ECONNABORTED") {
         setError("Grading timed out before the backend finished the response.");
@@ -217,6 +223,31 @@ function ExamStudioPage() {
     () => buildProgressLabel(answeredCount, exam?.questions.length || 0),
     [answeredCount, exam],
   );
+
+  const handleExportJSON = useCallback(() => {
+    if (!exam || !results) return;
+    const payload = {
+      exam_id: examId,
+      document_id: documentId,
+      questions: exam.questions,
+      answers: results.details.map((d) => ({
+        question: d.question,
+        type: d.type,
+        user_answer: d.userAnswer,
+        correct_answer: d.correctAnswer,
+        is_correct: d.isCorrect,
+        explanation: d.explanation,
+        source: d.source,
+      })),
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `exam-${examId}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [exam, examId, documentId, results]);
 
   const handleFeedbackSubmit = async () => {
     if (!feedbackText.trim()) return;
@@ -367,6 +398,22 @@ function ExamStudioPage() {
                 type="button"
               >
                 Build new exam
+              </button>
+              {documentId && (
+                <button
+                  className="secondary-outline-button"
+                  onClick={() => navigate(`/config/${documentId}`)}
+                  type="button"
+                >
+                  Re-generate from same materials
+                </button>
+              )}
+              <button
+                className="secondary-outline-button"
+                onClick={handleExportJSON}
+                type="button"
+              >
+                Export as JSON
               </button>
             </div>
           </div>
