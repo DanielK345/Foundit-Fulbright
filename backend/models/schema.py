@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Any, Optional
 
 
 class ExamConfig(BaseModel):
@@ -25,6 +25,7 @@ class Question(BaseModel):
 
 class ExamResponse(BaseModel):
     exam_id: str
+    document_id: Optional[str] = None
     questions: list[Question]
     time_limit: int
 
@@ -54,6 +55,15 @@ class IdeasResponse(BaseModel):
 class FeedbackRequest(BaseModel):
     exam_id: str
     feedback: str
+
+
+class AnalysisRequest(BaseModel):
+    details: list[dict[str, Any]]
+
+
+class RequirementsResponse(BaseModel):
+    document_id: str
+    requirements: list[str]
 
 
 class GradeRequest(BaseModel):

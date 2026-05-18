@@ -1,6 +1,10 @@
 import uuid
 from fastapi import APIRouter, HTTPException
-from models.schema import ExamConfig, ExamResponse, Question, GradeRequest, GradeResponse, FeedbackRequest
+from models.schema import (
+    ExamConfig, ExamResponse, Question,
+    GradeRequest, GradeResponse, FeedbackRequest,
+    AnalysisRequest, RequirementsResponse,
+)
 from services.generator import generate_questions
 from services.validator import validate_questions
 from services.grader import grade_exam
@@ -101,6 +105,7 @@ async def generate_exam(config: ExamConfig):
 
     exam_data = ExamResponse(
         exam_id=exam_id,
+        document_id=config.document_id,
         questions=exam_questions,
         time_limit=config.time_limit,
     )
@@ -148,3 +153,44 @@ async def grade(request: GradeRequest):
 
     result = grade_exam(questions, request.answers)
     return GradeResponse(**result)
+
+
+@router.post("/exam/{exam_id}/analyze")
+async def analyze_exam_results(exam_id: str, request: AnalysisRequest):
+    """Run the result analyzer agent and store recommendations for the next exam."""
+    from app import exam_doc_store, feedback_store
+    from agents.result_analyzer import analyze_results
+
+    if exam_id not in exam_doc_store:
+        raise HTTPException(status_code=404, detail="Exam not found.")
+
+    doc_id = exam_doc_store[exam_id]
+
+    try:
+        analysis = analyze_results(request.details)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
+    if doc_id not in feedback_store:
+        feedback_store[doc_id] = []
+    feedback_store[doc_id].append(analysis)
+
+    return {"message": "Analysis complete.", "analysis": analysis}
+
+
+@router.get("/requirements/{document_id}", response_model=RequirementsResponse)
+async def get_requirements(document_id: str):
+    """Return stored feedback and analysis requirements for a document."""
+    from app import feedback_store
+
+    requirements = feedback_store.get(document_id, [])
+    return RequirementsResponse(document_id=document_id, requirements=requirements)
+
+
+@router.delete("/requirements/{document_id}")
+async def clear_requirements(document_id: str):
+    """Clear all stored feedback and analysis requirements for a document."""
+    from app import feedback_store
+
+    feedback_store.pop(document_id, None)
+    return {"message": "Requirements cleared."}

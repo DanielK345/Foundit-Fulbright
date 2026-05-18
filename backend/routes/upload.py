@@ -123,7 +123,7 @@ async def update_document_context(document_id: str, body: UpdateContextRequest):
 @router.post("/{document_id}/ideas", response_model=IdeasResponse)
 async def extract_document_ideas(document_id: str):
     from app import documents_store
-    from services.generator import extract_main_ideas
+    from agents.content_summarizer import extract_main_ideas
 
     if document_id not in documents_store:
         raise HTTPException(status_code=404, detail="Document not found.")
