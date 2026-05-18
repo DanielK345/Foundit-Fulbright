@@ -68,6 +68,24 @@ function XIcon() {
   );
 }
 
+function ThumbUpIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <path d="M7 10v12" />
+      <path d="M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z" />
+    </svg>
+  );
+}
+
+function ThumbDownIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <path d="M17 14V2" />
+      <path d="M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z" />
+    </svg>
+  );
+}
+
 function getAnsweredCount(answers) {
   return Object.values(answers).filter(
     (value) => value !== undefined && value !== "",
@@ -94,6 +112,9 @@ function ExamStudioPage() {
   const [grading, setGrading] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [flaggedQuestions, setFlaggedQuestions] = useState([]);
+  // Per-question ratings: {[questionIndex]: {rating: 'up'|'down', reason: string}}
+  // Only thumbs-down with reasons are sent to the backend — thumbs-up = silence.
+  const [questionFeedback, setQuestionFeedback] = useState({});
   const [feedbackText, setFeedbackText] = useState("");
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
@@ -206,6 +227,40 @@ function ExamStudioPage() {
       gradeExam();
     }
   }, [gradeExam, submitted]);
+
+  const handleRating = useCallback((qIdx, rating) => {
+    setQuestionFeedback((prev) => {
+      const current = prev[qIdx] || {};
+      // Clicking the active rating again clears it
+      if (current.rating === rating) {
+        const next = { ...prev };
+        delete next[qIdx];
+        return next;
+      }
+      return { ...prev, [qIdx]: { rating, reason: current.reason || "" } };
+    });
+  }, []);
+
+  const handleRatingReason = useCallback((qIdx, reason) => {
+    setQuestionFeedback((prev) => ({
+      ...prev,
+      [qIdx]: { ...(prev[qIdx] || {}), reason },
+    }));
+  }, []);
+
+  // Fire-and-forget: convert thumbs-down entries to feedback strings on the backend.
+  // Called before navigating away from the results page.
+  const submitRatings = useCallback(() => {
+    const ratings = Object.entries(questionFeedback).map(([idx, fb]) => ({
+      question_index: parseInt(idx, 10),
+      rating: fb.rating,
+      reason: fb.reason || "",
+    }));
+    if (ratings.length === 0) return;
+    axios
+      .post(`${API_URL}/exam/${examId}/question-ratings`, { ratings }, { timeout: 10000 })
+      .catch(() => {});
+  }, [questionFeedback, examId]);
 
   const answeredCount = useMemo(() => getAnsweredCount(answers), [answers]);
   const progressLabel = useMemo(
@@ -397,7 +452,7 @@ function ExamStudioPage() {
             <div className="results-header-actions">
               <button
                 className="secondary-outline-button"
-                onClick={() => navigate("/")}
+                onClick={() => { submitRatings(); navigate("/"); }}
                 type="button"
               >
                 Build new exam
@@ -405,7 +460,7 @@ function ExamStudioPage() {
               {documentId && (
                 <button
                   className="secondary-outline-button"
-                  onClick={() => navigate(`/config/${documentId}`)}
+                  onClick={() => { submitRatings(); navigate(`/config/${documentId}`); }}
                   type="button"
                 >
                   Re-generate from same materials
@@ -474,6 +529,46 @@ function ExamStudioPage() {
                   <p>{detail.explanation}</p>
                   {detail.feedback && <p>{detail.feedback}</p>}
                   <small>{detail.source}</small>
+                </div>
+
+                <div className="q-rating-row">
+                  <span className="q-rating-label">Rate this question</span>
+                  <button
+                    aria-label="Good question"
+                    className={`thumb-btn${
+                      questionFeedback[detail.questionIndex]?.rating === "up"
+                        ? " thumb-up-active"
+                        : ""
+                    }`}
+                    onClick={() => handleRating(detail.questionIndex, "up")}
+                    type="button"
+                  >
+                    <ThumbUpIcon />
+                  </button>
+                  <button
+                    aria-label="Poor question"
+                    className={`thumb-btn${
+                      questionFeedback[detail.questionIndex]?.rating === "down"
+                        ? " thumb-down-active"
+                        : ""
+                    }`}
+                    onClick={() => handleRating(detail.questionIndex, "down")}
+                    type="button"
+                  >
+                    <ThumbDownIcon />
+                  </button>
+                  {questionFeedback[detail.questionIndex]?.rating === "down" && (
+                    <textarea
+                      className="q-rating-reason"
+                      maxLength={200}
+                      onChange={(e) =>
+                        handleRatingReason(detail.questionIndex, e.target.value)
+                      }
+                      placeholder="What was wrong with this question? (optional)"
+                      rows={2}
+                      value={questionFeedback[detail.questionIndex]?.reason || ""}
+                    />
+                  )}
                 </div>
               </article>
             ))}

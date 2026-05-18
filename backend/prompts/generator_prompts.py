@@ -52,6 +52,12 @@ HOMEWORK, and READING material. Apply the following rules based on source type:
       in the 'source' field separated by commas, e.g., "slide_5, hw2_page_3".
 
 Follow these general principles when generating questions:
+0. NEVER reference the source material inside any question text. Students take this exam without access to the uploaded files. Every question must be fully self-contained.
+   - FORBIDDEN: "...in the provided code snippet from Homework 2, Question 5?"
+   - FORBIDDEN: "According to the lecture slides, what is...?"
+   - FORBIDDEN: "Based on the context above, which..."
+   - FORBIDDEN: "From the reading material, explain..."
+   - RIGHT: Ask about the concept directly, embedding any necessary context in the question itself.
 1. Progressive difficulty: Start with foundational concepts and gradually increase complexity
 2. Questions should test understanding of key concepts, not trivial details or filler questions like "Which of these is covered in the context?"
 3. Cognitive levels: Include a mix of recall, understanding, application, and analysis questions
@@ -87,12 +93,25 @@ GUIDELINES FOR TRUE/FALSE:
 - The answer must be factually accurate based on the content
 
 GUIDELINES FOR SHORT ANSWER:
-- The 'answer' field MUST be a concise string containing the expected answer — NEVER a number
-- VALID: answer: "photosynthesis", answer: "Albert Einstein"
-- INVALID: answer: "0", answer: "1"
+- Short answer questions MUST require reasoning, explanation, or analysis — NOT simple concept identification.
+- The question must be open-ended so that a single word or phrase is clearly an insufficient answer.
+- FORBIDDEN question patterns (these produce trivia, not short answer — do NOT generate them):
+    * "What is the term for...?"  → one-word answer
+    * "What hardware component does X?"  → one-word answer
+    * "Name the X that Y"  → one-word answer
+    * "Which X is responsible for...?"  → one-word answer
+    * Any question whose correct answer is a single noun or acronym (TLB, mutex, semaphore, etc.)
+- REQUIRED question patterns (force reasoning — use these):
+    * "Explain why X happens when..." or "Explain how X works."
+    * "Describe the trade-off between X and Y."
+    * "Why does the OS need X, and what problem does it solve?"
+    * "How does X improve Y, and what are its limitations?"
+    * "Compare X and Y: when would you choose one over the other?"
+- The 'answer' field MUST be a full model answer of 2-4 sentences demonstrating understanding.
+    * VALID: "The TLB caches recent virtual-to-physical address translations to avoid consulting the page table on every memory access. Without the TLB, each memory reference would require at least one additional memory lookup, doubling effective access time. Because programs exhibit spatial and temporal locality, a small TLB achieves a high hit rate in practice."
+    * INVALID: "TLB" — a single concept with no reasoning
+    * INVALID: "Paging" — names the term without explaining anything
 - Set options: null
-- The answer should be concise but complete (1-3 words or a short phrase)
-- Focus on key terms, concepts, or specific values that demonstrate understanding
 
 GUIDELINES FOR CODING:
 - Coding questions are ONLY appropriate when the source material contains ACTUAL code examples, pseudocode, system call sequences, or algorithm implementations directly related to the topic being taught. If the content has no relevant code, set your coding output to 0 and redistribute those questions as short_answer.
@@ -123,6 +142,7 @@ SELF-CHECK BEFORE OUTPUTTING (mandatory):
 1. List every concept tested across all your questions. If any concept appears more than once, replace the duplicate with a question on a different topic.
 2. For each coding question: can you point to the exact line in the source material where the code or pseudocode came from? If not, replace it with a short_answer question.
 3. For each true/false question: does it test an OS mechanism directly, or does it only test knowledge of a story/analogy? If the latter, rewrite it to test the underlying concept.
+4. Read every question text. Does it mention a file name, homework number, question number, lecture number, or phrase like "the provided code", "the context above", "according to the slides"? If yes, rewrite it to remove all source references.
 OUTPUT (strict JSON only, no extra text):
 {{
   "questions": [

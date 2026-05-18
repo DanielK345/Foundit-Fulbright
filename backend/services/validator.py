@@ -195,6 +195,24 @@ def _is_valid_structure(question: dict) -> bool:
         # Reject single-character answers ("A", "x", "0")
         if len(answer) <= 1:
             return False
+        # Reject trivia-style answers — SA must require reasoning, so the
+        # model answer must be at least 2 sentences (~12 words minimum).
+        if len(answer.split()) < 12:
+            return False
+        # Reject trivia-style question stems that invite a one-word answer.
+        q_lower = question.get("question", "").lower().strip()
+        _TRIVIA_STEMS = (
+            "what is the term for",
+            "what is the name of",
+            "what hardware component",
+            "what software component",
+            "name the ",
+            "which component ",
+            "which hardware ",
+            "which data structure ",
+        )
+        if any(q_lower.startswith(stem) for stem in _TRIVIA_STEMS):
+            return False
 
     elif qtype == "coding":
         if not question.get("code_snippet"):
@@ -207,6 +225,26 @@ def _is_valid_structure(question: dict) -> bool:
         return False  # unknown type
 
     if len(question["question"].split()) < 3:
+        return False
+
+    # Reject questions that expose source document internals to the student.
+    # (e.g. "...from Homework 2, Question 5" or "in the provided code snippet")
+    q_lower = question["question"].lower()
+    _SOURCE_LEAKS = (
+        "homework ",
+        "provided code snippet",
+        "provided snippet",
+        "according to the",
+        "based on the context",
+        "from the context",
+        "in the context",
+        "from the lecture",
+        "from the reading",
+        "from the slides",
+        "the above code",
+        "above snippet",
+    )
+    if any(phrase in q_lower for phrase in _SOURCE_LEAKS):
         return False
 
     return True

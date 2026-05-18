@@ -85,6 +85,16 @@ class RequirementsResponse(BaseModel):
     requirements: list[str]
 
 
+class QuestionRating(BaseModel):
+    question_index: int
+    rating: str          # "up" | "down"
+    reason: str = ""
+
+
+class QuestionRatingsRequest(BaseModel):
+    ratings: list[QuestionRating]
+
+
 class GradeRequest(BaseModel):
     exam_id: str
     answers: dict[str, str]  # question index (str) -> user answer

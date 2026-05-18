@@ -4,6 +4,7 @@ from models.schema import (
     ExamConfig, ExamResponse, Question,
     GradeRequest, GradeResponse, FeedbackRequest,
     AnalysisRequest, AddRequirementRequest, RequirementsResponse,
+    QuestionRatingsRequest,
 )
 from services.generator import generate_questions
 from services.validator import validate_questions
@@ -153,6 +154,43 @@ async def submit_feedback(request: FeedbackRequest):
     feedback_store[doc_id].append(request.feedback.strip())
 
     return {"message": "Feedback saved. It will be applied to the next exam generated from this document."}
+
+
+@router.post("/exam/{exam_id}/question-ratings")
+async def rate_questions(exam_id: str, request: QuestionRatingsRequest):
+    """
+    Accept per-question thumbs-up / thumbs-down ratings from the results page.
+
+    Only thumbs-down entries with a non-empty reason are actionable: they are
+    converted to feedback strings and appended to feedback_store[doc_id] so
+    they influence the next generation for the same document.
+
+    Thumbs-up = silence = zero bytes stored. This is the most memory-efficient
+    approach — no new store, no new keys, just appending to the existing list.
+    """
+    from app import exams_store, exam_doc_store, feedback_store
+
+    if exam_id not in exams_store:
+        raise HTTPException(status_code=404, detail="Exam not found.")
+
+    doc_id = exam_doc_store.get(exam_id)
+    if not doc_id:
+        raise HTTPException(status_code=404, detail="Exam document not found.")
+
+    bad = [r for r in request.ratings if r.rating == "down" and r.reason.strip()]
+    if bad:
+        questions = exams_store[exam_id].questions
+        if doc_id not in feedback_store:
+            feedback_store[doc_id] = []
+        for r in bad:
+            idx = r.question_index
+            q_text = questions[idx].question[:120] if idx < len(questions) else f"question {idx + 1}"
+            feedback_store[doc_id].append(
+                f"Q{idx + 1} was flagged as poor — {r.reason.strip()}"
+                f' (question: "{q_text}")'
+            )
+
+    return {"accepted": len(bad)}
 
 
 @router.post("/grade", response_model=GradeResponse)
