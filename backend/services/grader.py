@@ -1,11 +1,9 @@
 import os
 import json
 import numpy as np
-import google.generativeai as genai
+from services.llm_provider import generate
 from services.embedder import embed_query
 from prompts.grader_prompts import LLM_GRADING_PROMPT
-
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 # Prompt moved to prompts/grader_prompts.py
 
@@ -32,16 +30,8 @@ def _llm_grade(question: str, reference: str, student: str) -> dict:
         student=student,
     )
 
-    model = genai.GenerativeModel(
-        "gemini-2.0-flash",
-        generation_config=genai.GenerationConfig(
-            temperature=0.1,
-            response_mime_type="application/json",
-        ),
-    )
-
-    response = model.generate_content(prompt)
-    parsed = json.loads(response.text.strip())
+    text = generate(prompt, temperature=0.1, use_json=True)
+    parsed = json.loads(text)
     return {
         "is_correct": parsed.get("score", 0) == 1,
         "feedback": parsed.get("reason", ""),
@@ -149,6 +139,7 @@ def grade_exam(questions: list[dict], answers: dict[str, str]) -> dict:
             "type": q_type,
             "user_answer": user_answer,
             "correct_answer": correct_answer,
+            "options": q.get("options"),
             "explanation": q.get("explanation", ""),
             "source": q.get("source", ""),
             "is_correct": is_correct,

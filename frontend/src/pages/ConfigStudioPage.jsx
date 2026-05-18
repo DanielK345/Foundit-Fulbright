@@ -12,8 +12,11 @@ function ConfigStudioPage() {
   const [error, setError] = useState(null);
   const [slowNotice, setSlowNotice] = useState(false);
   const [requirements, setRequirements] = useState([]);
+  const [reqsError, setReqsError] = useState(false);
   const [clearingReqs, setClearingReqs] = useState(false);
   const [additionalReq, setAdditionalReq] = useState("");
+  // null = checking, "ok" = document exists, "missing" = not found on server
+  const [documentStatus, setDocumentStatus] = useState(null);
   const [config, setConfig] = useState({
     time_limit: 30,
     mcq: 5,
@@ -34,12 +37,30 @@ function ConfigStudioPage() {
     setConfig((prev) => ({ ...prev, [field]: value }));
   };
 
+  // Pre-flight: verify the document still exists on the server (in-memory
+  // stores are cleared on restart, so we check before the user hits Generate).
+  useEffect(() => {
+    if (isDemo) { setDocumentStatus("ok"); return; }
+    axios
+      .get(`${API_URL}/upload/${documentId}/status`, { timeout: 10000 })
+      .then(() => setDocumentStatus("ok"))
+      .catch((err) => {
+        if (err.response?.status === 404) {
+          setDocumentStatus("missing");
+        } else {
+          // Network error or server down — don't block the form, just let
+          // the generate call surface the real error.
+          setDocumentStatus("ok");
+        }
+      });
+  }, [documentId, isDemo]);
+
   useEffect(() => {
     if (isDemo) return;
     axios
       .get(`${API_URL}/requirements/${documentId}`, { timeout: 10000 })
-      .then((res) => setRequirements(res.data.requirements || []))
-      .catch(() => {});
+      .then((res) => { setRequirements(res.data.requirements || []); setReqsError(false); })
+      .catch(() => setReqsError(true));
   }, [documentId, isDemo]);
 
   const handleClearRequirements = async () => {
@@ -144,15 +165,17 @@ function ConfigStudioPage() {
             </button>
             <button
               className="primary-pill-button"
-              disabled={isDemo || loading}
+              disabled={isDemo || loading || documentStatus === "missing" || documentStatus === null}
               onClick={handleGenerate}
               type="button"
             >
               {isDemo
                 ? "Upload documents first"
-                : loading
-                  ? "Generating..."
-                  : "Generate exam"}
+                : documentStatus === null
+                  ? "Checking document…"
+                  : loading
+                    ? "Generating..."
+                    : "Generate exam"}
             </button>
           </div>
         </div>
@@ -161,6 +184,35 @@ function ConfigStudioPage() {
           <div className="feedback-banner info">
             Demo mode: open Dashboard, upload PDF/PPTX files, then return here
             with a generated document id.
+          </div>
+        )}
+
+        {documentStatus === "missing" && (
+          <div className="feedback-banner error" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <strong>Document context not found on the server.</strong>
+            <span>
+              The backend may have restarted and lost its in-memory data.
+              Re-upload your source files to continue, or check the context
+              preview page to confirm what is still available.
+            </span>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <button
+                className="primary-pill-button"
+                onClick={() => navigate("/")}
+                type="button"
+                style={{ fontSize: "0.85rem" }}
+              >
+                Re-upload materials
+              </button>
+              <button
+                className="secondary-outline-button"
+                onClick={() => navigate(`/review/${documentId}`)}
+                type="button"
+                style={{ fontSize: "0.85rem" }}
+              >
+                Preview context
+              </button>
+            </div>
           </div>
         )}
 
@@ -302,7 +354,11 @@ function ConfigStudioPage() {
               </button>
             )}
           </div>
-          {requirements.length === 0 ? (
+          {reqsError ? (
+            <p style={{ fontSize: "0.82rem", color: "#ef4444", margin: 0 }}>
+              Could not load requirements — the server may be unavailable.
+            </p>
+          ) : requirements.length === 0 ? (
             <p style={{ fontSize: "0.82rem", color: "#94a3b8", margin: 0 }}>
               None yet — feedback and result analysis from previous exams will appear here and be applied automatically.
             </p>

@@ -86,6 +86,18 @@ function ThumbDownIcon() {
   );
 }
 
+function resolveOptionText(answer, options) {
+  if (!answer || !options || !options.length) return answer;
+  // Match the leading letter regardless of separator ("A.", "A)", "A " etc.)
+  const letter = answer.trim()[0].toUpperCase();
+  return (
+    options.find((o) => {
+      const first = o.trim()[0]?.toUpperCase();
+      return first === letter;
+    }) || answer
+  );
+}
+
 function getAnsweredCount(answers) {
   return Object.values(answers).filter(
     (value) => value !== undefined && value !== "",
@@ -192,6 +204,7 @@ function ExamStudioPage() {
           type: detail.type,
           userAnswer: detail.user_answer,
           correctAnswer: detail.correct_answer,
+          options: detail.options || null,
           explanation: detail.explanation,
           source: detail.source,
           isCorrect: detail.is_correct,
@@ -516,16 +529,20 @@ function ExamStudioPage() {
                 <div className="review-answer-grid">
                   <div className="review-answer-box">
                     <span>Your answer</span>
-                    <p>{detail.userAnswer || "(no answer)"}</p>
+                    <p>{detail.userAnswer && detail.options?.length
+                      ? resolveOptionText(detail.userAnswer, detail.options)
+                      : (detail.userAnswer || "(no answer)")}</p>
                   </div>
                   <div className="review-answer-box emphasis">
                     <span>Correct answer</span>
-                    <p>{detail.correctAnswer}</p>
+                    <p>{detail.options?.length
+                      ? resolveOptionText(detail.correctAnswer, detail.options)
+                      : detail.correctAnswer}</p>
                   </div>
                 </div>
 
                 <div className="review-explanation">
-                  <strong>Why this matters</strong>
+                  <strong>Explanation</strong>
                   <p>{detail.explanation}</p>
                   {detail.feedback && <p>{detail.feedback}</p>}
                   <small>{detail.source}</small>
@@ -629,7 +646,7 @@ function ExamStudioPage() {
           </div>
 
           <div className="question-nav-grid">
-            {sortedQuestions.map((_, index) => {
+            {sortedQuestions.map((q, index) => {
               const isCurrent = index === currentIndex;
               const isAnswered = Boolean(answers[sortedQuestions[index]._originalIndex]);
               const isFlagged = flaggedQuestions.includes(index);
@@ -640,9 +657,13 @@ function ExamStudioPage() {
                   : isAnswered
                     ? "answered"
                     : "";
+              const typeClass = q.type === "true_false" ? "qtype-tf"
+                : q.type === "short_answer" ? "qtype-sa"
+                : q.type === "coding" ? "qtype-coding"
+                : "qtype-mcq";
               return (
                 <button
-                  className={`question-nav-chip ${stateClass}`}
+                  className={`question-nav-chip ${stateClass} ${typeClass}`}
                   key={`nav-${index}`}
                   onClick={() => setCurrentIndex(index)}
                   type="button"

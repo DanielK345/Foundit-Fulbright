@@ -5,11 +5,8 @@ Summarizes uploaded educational content into key concepts that serve as the
 main context displayed in the review step and fed to the exam generator.
 """
 
-import os
-import google.generativeai as genai
 from prompts.summarizer_prompts import SUMMARIZER_PROMPT
-
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+from services.llm_provider import generate
 
 # Prompt moved to prompts/summarizer_prompts.py
 
@@ -27,9 +24,4 @@ def extract_main_ideas(chunks: list[dict]) -> str:
     context = _build_context_block(chunks)
     prompt = SUMMARIZER_PROMPT.format(context=context)
 
-    model = genai.GenerativeModel(
-        "gemini-2.0-flash",
-        generation_config=genai.GenerationConfig(temperature=0.3),
-    )
-    response = model.generate_content(prompt)
-    return response.text.strip()
+    return generate(prompt, temperature=0.3)

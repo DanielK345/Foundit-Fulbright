@@ -1,9 +1,7 @@
 import os
 import json
-import google.generativeai as genai
 from prompts.generator_prompts import GENERATOR_PROMPT_TEMPLATE
-
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+from services.llm_provider import generate
 
 # Prompt moved to prompts/generator_prompts.py
 PROMPT_TEMPLATE = GENERATOR_PROMPT_TEMPLATE  # kept as alias for compatibility
@@ -52,6 +50,8 @@ def generate_questions(
     coding: int = 0,
     focus: str = None,
     past_feedback: list[str] = None,
+    covered_concept_keys: list[str] = None,
+    validation_feedback: list[str] = None,
     temperature: float = 0.7,
 ) -> list[dict]:
     """Generate exam questions using Gemini with full document context."""
@@ -64,6 +64,23 @@ def generate_questions(
     else:
         feedback_section = ""
 
+    if covered_concept_keys:
+        covered_lines = "\n".join(f"  - {k}" for k in covered_concept_keys)
+        feedback_section = (
+            f"\nCONCEPTS ALREADY COVERED — do NOT generate questions on these "
+            f"subtopics (they will be rejected as duplicates):\n{covered_lines}\n"
+        ) + feedback_section
+
+    if validation_feedback:
+        # Injected at the very top so it's the first thing the model reads —
+        # these are concrete errors from the previous attempt that must be fixed.
+        correction_lines = "\n".join(f"  \u26a0 {h}" for h in validation_feedback)
+        feedback_section = (
+            f"\nCORRECTIONS REQUIRED (the following question types were rejected "
+            f"by the validator in the previous attempt — do NOT repeat these errors):\n"
+            f"{correction_lines}\n"
+        ) + feedback_section
+
     prompt = PROMPT_TEMPLATE.format(
         context=context,
         mcq=mcq,
@@ -75,16 +92,7 @@ def generate_questions(
         feedback_section=feedback_section,
     )
 
-    model = genai.GenerativeModel(
-        "gemini-2.0-flash",
-        generation_config=genai.GenerationConfig(
-            temperature=temperature,
-            response_mime_type="application/json",
-        ),
-    )
-
-    response = model.generate_content(prompt)
-    text = response.text.strip()
+    text = generate(prompt, temperature=temperature, use_json=True)
 
     # Parse JSON response
     parsed = json.loads(text)

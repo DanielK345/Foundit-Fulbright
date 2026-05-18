@@ -70,6 +70,17 @@ Follow these general principles when generating questions:
    c. If the content covers N topics and you need M questions where M ≤ N, choose M different topics with no overlap. If M > N, only then may a topic appear in two questions, and they must test different cognitive levels (e.g., recall vs. application).
    d. "Thread synchronization", "thread creation", and "thread scheduling" are THREE separate concepts — do not collapse them. Similarly, "semaphore" and "mutex" are distinct even though both are synchronization primitives.
    e. After drafting all questions, scan for concept overlap and replace any duplicate-concept question with one on a topic not yet covered.
+   f. CONCEPT TRACKING — for every question you write, assign a `concept_key` using this three-level hierarchy:
+        broad_topic / subtopic / specific_aspect
+      Examples:
+        "deadlock/coffman-conditions/mutual-exclusion"
+        "synchronization/semaphore/down-p-operation"
+        "memory-management/paging/page-fault-handling"
+        "process/scheduling/round-robin-algorithm"
+      Rules for concept_key:
+        - Use lowercase letters, hyphens for spaces, and forward-slashes as separators.
+        - The `subtopic` must be UNIQUE across ALL questions in this exam. Two questions sharing the same `broad_topic/subtopic` (e.g. both "synchronization/semaphore") are testing the same area — replace one immediately.
+        - The `specific_aspect` adds precision but does NOT excuse a repeated subtopic.
 8. TEST OS CONCEPTS DIRECTLY — NOT ANALOGIES OR METAPHORS:
    - The content may use real-world analogies (e.g., "Too Much Milk", "Dining Philosophers as a restaurant scenario") to illustrate an OS concept. Do NOT write questions that test the analogy story itself.
    - WRONG: "What does the 'Too Much Milk' problem illustrate?" — tests the wrapper, not the concept
@@ -143,6 +154,8 @@ SELF-CHECK BEFORE OUTPUTTING (mandatory):
 2. For each coding question: can you point to the exact line in the source material where the code or pseudocode came from? If not, replace it with a short_answer question.
 3. For each true/false question: does it test an OS mechanism directly, or does it only test knowledge of a story/analogy? If the latter, rewrite it to test the underlying concept.
 4. Read every question text. Does it mention a file name, homework number, question number, lecture number, or phrase like "the provided code", "the context above", "according to the slides"? If yes, rewrite it to remove all source references.
+5. For every pair of MCQ questions: do they share 3 or more identical answer options? If yes, they test the same concept — replace one with a question on a clearly different topic with a different option set.
+6. List all `concept_key` values. Are any two questions sharing the same `broad_topic/subtopic` prefix? If yes, that is a duplicate — replace one with a question on a completely different subtopic.
 OUTPUT (strict JSON only, no extra text):
 {{
   "questions": [
@@ -153,7 +166,8 @@ OUTPUT (strict JSON only, no extra text):
       "options": ["A) ...", "B) ...", "C) ...", "D) ..."],
       "answer": "A",
       "explanation": "Brief explanation of why this is correct.",
-      "source": "slide_3"
+      "source": "slide_3",
+      "concept_key": "broad-topic/subtopic/specific-aspect"
     }},
     {{
       "type": "true_false",
@@ -162,7 +176,8 @@ OUTPUT (strict JSON only, no extra text):
       "options": ["True", "False"],
       "answer": "True",
       "explanation": "Brief explanation.",
-      "source": "page_2"
+      "source": "page_2",
+      "concept_key": "broad-topic/subtopic/specific-aspect"
     }},
     {{
       "type": "short_answer",
@@ -171,16 +186,18 @@ OUTPUT (strict JSON only, no extra text):
       "options": null,
       "answer": "Expected answer (1-3 words or short phrase).",
       "explanation": "Brief explanation.",
-      "source": "page_1"
+      "source": "page_1",
+      "concept_key": "broad-topic/subtopic/specific-aspect"
     }},
     {{
       "type": "coding",
       "question": "What is the output of the following code?",
-      "code_snippet": "int x = 5;\\nx++;\\nprintf(\\"%d\\\\n\\", x);",
+      "code_snippet": "int x = 5;\\nx++;\\nprintf(\\"% d\\\\n\\", x);",
       "options": ["A) 5", "B) 6", "C) 4", "D) Compile error"],
       "answer": "B",
       "explanation": "x++ increments x from 5 to 6 before printf runs.",
-      "source": "slide_2"
+      "source": "slide_2",
+      "concept_key": "broad-topic/subtopic/specific-aspect"
     }},
     {{
       "type": "coding",
@@ -189,7 +206,8 @@ OUTPUT (strict JSON only, no extra text):
       "options": null,
       "answer": "3",
       "explanation": "This is a Fibonacci function. f(4) = f(3)+f(2) = 2+1 = 3.",
-      "source": "page_1"
+      "source": "page_1",
+      "concept_key": "broad-topic/subtopic/specific-aspect"
     }}
   ]
 }}

@@ -25,6 +25,7 @@ class Question(BaseModel):
     explanation: str
     source: str
     code_snippet: Optional[str] = None
+    concept_key: Optional[str] = None  # "broad/subtopic/specific" hierarchy slug
 
 
 class ExamResponse(BaseModel):
@@ -106,6 +107,7 @@ class QuestionResult(BaseModel):
     type: str
     user_answer: str
     correct_answer: str
+    options: Optional[list[str]] = None
     explanation: str
     source: str
     is_correct: Optional[bool]
