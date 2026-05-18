@@ -11,6 +11,7 @@ function ReviewIdeasPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [ideas, setIdeas] = useState("");
+  const [additionalReqs, setAdditionalReqs] = useState("");
   const [proceeding, setProceeding] = useState(false);
 
   useEffect(() => {
@@ -45,15 +46,15 @@ function ReviewIdeasPage() {
   const handleContinue = async () => {
     setProceeding(true);
     try {
-      // Save the reviewed/edited ideas back as the document context so the
-      // exam generator uses the curated content instead of raw extracted text.
-      await axios.put(
-        `${API_URL}/upload/${documentId}/context`,
-        { content: ideas },
-        { timeout: 30000 },
-      );
+      if (additionalReqs.trim()) {
+        await axios.post(
+          `${API_URL}/requirements/${documentId}`,
+          { requirement: additionalReqs.trim() },
+          { timeout: 10000 },
+        );
+      }
     } catch {
-      // Non-fatal — proceed anyway; generation will fall back to original content.
+      // Non-fatal — proceed anyway
     }
     navigate(`/config/${documentId}`);
   };
@@ -66,9 +67,8 @@ function ReviewIdeasPage() {
             <p className="eyebrow">Step 2 of 4 — Review</p>
             <h1>Review Key Concepts</h1>
             <p>
-              Gemini extracted the main ideas from your slides. Edit anything
-              that looks off before building your exam — these concepts will
-              guide question generation.
+              Gemini extracted the main ideas from your materials. Review them
+              below, then add any specific requirements before building your exam.
             </p>
           </div>
           <div className="config-header-actions">
@@ -81,7 +81,7 @@ function ReviewIdeasPage() {
             </button>
             <button
               className="primary-pill-button"
-              disabled={loading || proceeding || !ideas.trim()}
+              disabled={loading || proceeding}
               onClick={handleContinue}
               type="button"
             >
@@ -93,7 +93,7 @@ function ReviewIdeasPage() {
         {loading && (
           <div className="ideas-loading-state">
             <div className="spinner" />
-            <p>Analyzing your slides...</p>
+            <p>Analyzing your materials...</p>
             <p className="ideas-loading-sub">
               Gemini is reading your documents and extracting key concepts.
             </p>
@@ -115,17 +115,27 @@ function ReviewIdeasPage() {
 
         {!loading && !error && (
           <>
-            <div className="ideas-meta-row">
-              <span>{ideas.length.toLocaleString()} characters</span>
-              <span>Edit freely — this becomes the exam focus</span>
+            <div className="ideas-section-label">
+              <span className="eyebrow">Extracted Key Concepts</span>
+              <span className="ideas-meta-note">
+                {ideas.length.toLocaleString()} characters · read-only
+              </span>
+            </div>
+            <div className="ideas-readonly-block">
+              {ideas || <span className="ideas-empty-note">No concepts extracted.</span>}
+            </div>
+
+            <div className="ideas-section-label" style={{ marginTop: 28 }}>
+              <span className="eyebrow">Additional Requirements</span>
+              <span className="ideas-meta-note">Optional — saved and applied to this exam</span>
             </div>
             <textarea
               className="ideas-textarea"
-              value={ideas}
-              onChange={(e) => setIdeas(e.target.value)}
-              rows={20}
+              value={additionalReqs}
+              onChange={(e) => setAdditionalReqs(e.target.value)}
+              rows={5}
               spellCheck={false}
-              placeholder="Extracted main ideas will appear here..."
+              placeholder="e.g. Focus on Chapter 3 definitions, avoid questions on X, include at least one recursion question..."
             />
           </>
         )}
@@ -155,16 +165,12 @@ function ReviewIdeasPage() {
         </div>
 
         <div className="sidebar-card sidebar-card-primary">
-          <p className="sidebar-note-title">Tips for reviewing</p>
+          <p className="sidebar-note-title">How requirements work</p>
           <ul className="plain-list">
-            <li>Remove any bullet points that seem off-topic or incorrect.</li>
-            <li>
-              Add concepts that Gemini may have missed from your slides.
-            </li>
-            <li>
-              The more accurate this list, the better the exam questions will
-              be.
-            </li>
+            <li>Requirements you enter here are saved and injected into the exam generation prompt.</li>
+            <li>After each exam, the Result Analyzer automatically appends improvement recommendations.</li>
+            <li>User feedback submitted after an exam is also appended.</li>
+            <li>All accumulated requirements are visible and clearable on the Config page.</li>
           </ul>
         </div>
 

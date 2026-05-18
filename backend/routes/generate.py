@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException
 from models.schema import (
     ExamConfig, ExamResponse, Question,
     GradeRequest, GradeResponse, FeedbackRequest,
-    AnalysisRequest, RequirementsResponse,
+    AnalysisRequest, AddRequirementRequest, RequirementsResponse,
 )
 from services.generator import generate_questions
 from services.validator import validate_questions
@@ -188,6 +188,25 @@ async def analyze_exam_results(exam_id: str, request: AnalysisRequest):
     feedback_store[doc_id].append(analysis)
 
     return {"message": "Analysis complete.", "analysis": analysis}
+
+
+@router.post("/requirements/{document_id}")
+async def add_requirement(document_id: str, request: AddRequirementRequest):
+    """Add a single user-supplied requirement for the next exam generated from this document."""
+    from app import documents_store, feedback_store
+
+    if document_id not in documents_store:
+        raise HTTPException(status_code=404, detail="Document not found.")
+
+    req = request.requirement.strip()
+    if not req:
+        raise HTTPException(status_code=400, detail="Requirement text must not be empty.")
+
+    if document_id not in feedback_store:
+        feedback_store[document_id] = []
+    feedback_store[document_id].append(req)
+
+    return {"message": "Requirement added."}
 
 
 @router.get("/requirements/{document_id}", response_model=RequirementsResponse)

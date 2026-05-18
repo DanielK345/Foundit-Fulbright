@@ -65,6 +65,10 @@ class AnalysisRequest(BaseModel):
     details: list[dict[str, Any]]
 
 
+class AddRequirementRequest(BaseModel):
+    requirement: str
+
+
 class RequirementsResponse(BaseModel):
     document_id: str
     requirements: list[str]
