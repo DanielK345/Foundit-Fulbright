@@ -441,9 +441,21 @@ def validate_questions(
     already_accepted: list[dict] = list(existing_questions or [])
 
     for q in questions:
+        # Coding questions with a code_snippet are "pre-grounded": the snippet
+        # IS the source-material reference, so the grounding check is skipped.
+        # Tier-0 concept-key dedup is also skipped so a coding question on the
+        # same subtopic as an already-accepted conceptual question is allowed
+        # through — a code exercise and a theory MCQ on the same topic serve
+        # different pedagogical purposes.  Text-similarity dedup (Tiers 1/2)
+        # still runs to prevent exact-duplicate coding questions.
+        is_coding_with_snippet = q.get("type") == "coding" and bool(q.get("code_snippet"))
+
         if not _is_valid_structure(q, relaxed=relaxed_rules):
             rejected.append({**q, "reject_reason": "invalid_structure"})
-        elif (conflict := _find_duplicate(q, already_accepted + rule_valid, strict=strict_dedup)) is not None:
+        elif (conflict := _find_duplicate(
+            q, already_accepted + rule_valid,
+            strict=strict_dedup and not is_coding_with_snippet,
+        )) is not None:
             # Store the conflicting question so the generator can receive
             # surgical feedback: exactly which accepted question each rejected
             # question duplicates, and which concept_key prefix to avoid.
@@ -453,7 +465,7 @@ def validate_questions(
                 "duplicate_of": conflict.get("question", ""),
                 "duplicate_of_key": conflict.get("concept_key", ""),
             })
-        elif not _answer_grounded(q, context_chunks, relaxed=relaxed_rules):
+        elif not is_coding_with_snippet and not _answer_grounded(q, context_chunks, relaxed=relaxed_rules):
             rejected.append({**q, "reject_reason": "answer_not_grounded"})
         else:
             rule_valid.append(q)

@@ -58,28 +58,41 @@ def generate_questions(
     context = build_context_block(chunks)
     focus_line = f"Focus area: {focus}" if focus else ""
 
+    # Build each section independently, then assemble in priority order:
+    #   1. ADDITIONAL REQUIREMENTS  — user's permanent intent, always topmost
+    #   2. CORRECTIONS REQUIRED     — retry-specific validator errors
+    #   3. CONCEPTS ALREADY COVERED — technical dedup constraint (lowest priority)
+    # LLMs weight early tokens heavily, so the ordering determines what gets
+    # honoured when context is long.
+
+    req_block = ""
     if past_feedback:
         feedback_lines = "\n".join(f"- {fb}" for fb in past_feedback[-5:])
-        feedback_section = f"\nADDITIONAL REQUIREMENTS (apply these improvements):\n{feedback_lines}\n"
-    else:
-        feedback_section = ""
+        req_block = (
+            f"\nADDITIONAL REQUIREMENTS (apply throughout ALL generated questions):\n"
+            f"{feedback_lines}\n"
+        )
 
-    if covered_concept_keys:
-        covered_lines = "\n".join(f"  - {k}" for k in covered_concept_keys)
-        feedback_section = (
-            f"\nCONCEPTS ALREADY COVERED — do NOT generate questions on these "
-            f"subtopics (they will be rejected as duplicates):\n{covered_lines}\n"
-        ) + feedback_section
-
+    correction_block = ""
     if validation_feedback:
-        # Injected at the very top so it's the first thing the model reads —
-        # these are concrete errors from the previous attempt that must be fixed.
         correction_lines = "\n".join(f"  \u26a0 {h}" for h in validation_feedback)
-        feedback_section = (
+        correction_block = (
             f"\nCORRECTIONS REQUIRED (the following question types were rejected "
             f"by the validator in the previous attempt — do NOT repeat these errors):\n"
             f"{correction_lines}\n"
-        ) + feedback_section
+        )
+
+    covered_block = ""
+    if covered_concept_keys:
+        covered_lines = "\n".join(f"  - {k}" for k in covered_concept_keys)
+        covered_block = (
+            f"\nCONCEPTS ALREADY COVERED — do NOT generate questions on these "
+            f"subtopics (they will be rejected as duplicates):\n{covered_lines}\n"
+        )
+
+    feedback_section = req_block + correction_block + covered_block
+
+
 
     prompt = PROMPT_TEMPLATE.format(
         context=context,

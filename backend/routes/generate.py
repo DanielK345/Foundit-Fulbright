@@ -206,6 +206,21 @@ async def generate_exam(config: ExamConfig):
         gen_sa     = math.ceil(need_sa     * 1.5) if need_sa     else 0
         gen_coding = math.ceil(need_coding * 1.5) if need_coding else 0
 
+        # When coding questions are needed, always inject a prominent reminder
+        # at the TOP of the validation hints regardless of whether there were
+        # prior rejections.  This is the #1 reason coding questions fail: the
+        # LLM omits the code_snippet field.  A persistent reminder costs nothing
+        # and prevents the slot from being empty on the very first attempt.
+        effective_hints: list[str] = []
+        if gen_coding > 0:
+            effective_hints.append(
+                "CRITICAL — every coding question MUST include a non-empty "
+                "'code_snippet' field with actual code or pseudocode taken "
+                "directly from the source material. Questions without "
+                "code_snippet will be rejected immediately."
+            )
+        effective_hints.extend(validation_hints)
+
         try:
             questions = generate_questions(
                 chunks=exam_chunks,
@@ -217,7 +232,7 @@ async def generate_exam(config: ExamConfig):
                 focus=config.focus,
                 past_feedback=past_feedback,
                 covered_concept_keys=covered_keys,
-                validation_feedback=validation_hints,
+                validation_feedback=effective_hints,
                 temperature=temperature,
             )
             _type_counts = {}
