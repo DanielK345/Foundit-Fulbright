@@ -6,10 +6,6 @@ Exported constants:
     is inconclusive (uses {question}, {reference}, {student})
 """
 
-# ---------------------------------------------------------------------------
-# Stage 2 LLM grading prompt (similarity fallback)
-# ---------------------------------------------------------------------------
-
 LLM_GRADING_PROMPT = """\
 You are a strict exam grader.
 

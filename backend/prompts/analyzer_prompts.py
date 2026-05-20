@@ -6,10 +6,6 @@ Exported constants:
     recommendations from graded results (uses {results_summary})
 """
 
-# ---------------------------------------------------------------------------
-# Result analysis prompt
-# ---------------------------------------------------------------------------
-
 ANALYZER_PROMPT = """\
 You are an expert educational analyst. Review these exam results and \
 produce specific, actionable recommendations to improve the next exam generated for this student.

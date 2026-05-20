@@ -6,10 +6,6 @@ Exported constants:
     educational content (uses {context})
 """
 
-# ---------------------------------------------------------------------------
-# Content summarisation prompt
-# ---------------------------------------------------------------------------
-
 SUMMARIZER_PROMPT = """\
 You are a content summarization agent specializing in educational material. \
 Your goal is to extract the core concepts from slides and notes so a student can \

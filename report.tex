@@ -1,0 +1,307 @@
+\documentclass[12pt, a4paper]{article}
+
+% ── Packages ─────────────────────────────────────────────────────────────────
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[a4paper, top=2.5cm, bottom=2.5cm, left=3cm, right=2.5cm]{geometry}
+\usepackage{titlesec}
+\usepackage{titletoc}
+\usepackage{tocloft}
+\usepackage{hyperref}
+\usepackage{parskip}
+\usepackage{setspace}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{microtype}
+
+% ── Hyperref setup ────────────────────────────────────────────────────────────
+\hypersetup{
+    colorlinks = true,
+    linkcolor  = black,
+    urlcolor   = blue,
+    citecolor  = black,
+    pdftitle   = {AI Exam Generator – CS312 Final Project Report},
+    pdfauthor  = {Pham Khac Duy, Nguyen Dang Nhat Anh, Nguyen Huynh Duc},
+}
+
+% ── Section formatting ────────────────────────────────────────────────────────
+\titleformat{\section}
+  {\large\bfseries}{\Roman{section}.}{0.6em}{}[\titlerule]
+\titleformat{\subsection}
+  {\normalsize\bfseries}{\arabic{subsection}.}{0.5em}{}
+\titleformat{\subsubsection}
+  {\normalsize\itshape}{\alph{subsubsection})}{0.5em}{}
+
+\titlespacing*{\section}{0pt}{1.8ex plus .5ex minus .2ex}{1ex plus .2ex}
+\titlespacing*{\subsection}{0pt}{1.2ex plus .3ex}{0.6ex plus .1ex}
+
+% ── Header / footer ───────────────────────────────────────────────────────────
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0.4pt}
+\fancyhead[L]{\small CS312 – Natural Language Processing}
+\fancyhead[R]{\small AI Exam Generator}
+\fancyfoot[C]{\thepage}
+
+% ── Line spacing ──────────────────────────────────────────────────────────────
+\onehalfspacing
+
+% ─────────────────────────────────────────────────────────────────────────────
+\begin{document}
+
+% ╔══════════════════════════════════════════════════════════════╗
+% ║  TITLE PAGE                                                  ║
+% ╚══════════════════════════════════════════════════════════════╝
+\begin{titlepage}
+  \thispagestyle{empty}
+  \centering
+  \vspace*{1.5cm}
+
+  {\Large\bfseries Ho Chi Minh City University of Technology\\[0.4em]
+  Faculty of Computer Science and Engineering}\\[1.2cm]
+
+  \rule{\linewidth}{1.5pt}\\[0.4cm]
+  {\LARGE\bfseries CS312 Natural Language Processing}\\[0.3cm]
+  {\large Final Project Report}\\[0.2cm]
+  \rule{\linewidth}{1.5pt}\\[1.5cm]
+
+  {\Huge\bfseries AI Exam Generator}\\[2cm]
+
+  \begin{tabular}{ll}
+    \toprule
+    \textbf{Name} & \textbf{Student ID} \\
+    \midrule
+    Pham Khac Duy   & 220219 \\
+    Nguyen Dang Nhat Anh & 220069 \\
+    Nguyen Huynh Duc     & 220080 \\
+    \bottomrule
+  \end{tabular}\\[2cm]
+
+  {\large Ho Chi Minh City, May 2026}
+  \vfill
+\end{titlepage}
+
+% ╔══════════════════════════════════════════════════════════════╗
+% ║  TABLE OF CONTENTS                                           ║
+% ╚══════════════════════════════════════════════════════════════╝
+\newpage
+\thispagestyle{fancy}
+\tableofcontents
+\newpage
+
+% ╔══════════════════════════════════════════════════════════════╗
+% ║  I. INTRODUCTION                                             ║
+% ╚══════════════════════════════════════════════════════════════╝
+\section{Introduction}
+
+The rapid growth of online and hybrid education has increased demand for scalable, high-quality assessment tools. Manually creating examination papers is both time-consuming and prone to inconsistency, motivating the exploration of automated generation systems.
+
+This project presents an \textbf{AI-powered Exam Generator} that transforms uploaded lecture materials into a ready-to-use examination in minutes. The system accepts PDF or slide files, extracts and indexes their content, and leverages a large language model (LLM) — Google's Gemini — to compose a diverse set of questions across multiple formats: Multiple Choice Questions (MCQ), True/False, Short Answer, and coding problems. Users have fine-grained control over the number of questions per type and may supply additional requirements such as a target topic area or a request for programming exercises.
+
+A rule-based validation pipeline ensures output quality before the exam is delivered to the front end. Once a student completes the exam, a hybrid grading engine scores responses and produces a detailed performance report, highlighting strengths and weaknesses and feeding suggestions back into the generation loop for future attempts.
+
+The application follows a decoupled architecture: a \textbf{FastAPI} backend handles all AI workloads, while a \textbf{React} frontend provides an intuitive interface for uploading materials, configuring exams, taking tests, and reviewing results. The entire stack is containerised with Docker for straightforward deployment.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=\linewidth]{diagram}
+  \caption{High-level system architecture: from file ingestion through exam generation, validation, and grading.}
+  \label{fig:diagram}
+\end{figure}
+
+% ╔══════════════════════════════════════════════════════════════╗
+% ║  II. MAIN FEATURES                                           ║
+% ╚══════════════════════════════════════════════════════════════╝
+\section{Main Features}
+
+\subsection{File Upload and Ingestion}
+
+When a user uploads a PDF or presentation file, the backend extracts its textual content using \textbf{PyMuPDF} (\texttt{fitz}), a fast, zero-dependency C-extension library that renders pages with high fidelity even for scanned or multi-column layouts. The extracted text is then split into overlapping chunks and indexed with \textbf{BM25} (Best Match 25), a classical probabilistic term-weighting retrieval model.
+
+BM25 was chosen deliberately over a traditional dense-vector RAG pipeline for several reasons:
+
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{No GPU required.} Dense embeddings typically require a GPU or a remote embedding API for reasonable throughput. BM25 is a purely in-memory, CPU-bound operation, keeping the deployment footprint minimal.
+  \item \textbf{Lexical precision.} For domain-specific academic material rich in technical terminology (equations, acronyms, proper nouns), sparse keyword matching often outperforms dense retrieval which may conflate semantically similar but contextually distinct terms.
+  \item \textbf{Sufficient for moderate file sizes.} Lecture slides and textbook chapters rarely exceed a few hundred pages, a scale where BM25 retrieval latency is negligible.
+  \item \textbf{Simplicity and reproducibility.} There are no embedding-model version drift issues; the same BM25 index always returns the same results for the same query.
+\end{itemize}
+
+Retrieved chunks are passed as context to the LLM during exam generation, anchoring questions to material actually present in the uploaded documents.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.92\linewidth]{main_page}
+  \caption{Upload page — users drag-and-drop PDF or PPTX source files before proceeding to exam setup.}
+  \label{fig:main_page}
+\end{figure}
+
+\subsection{Content Summarising Agent}
+
+After ingestion, a summarisation agent sends the extracted text to the Gemini model with a structured prompt requesting a concise outline of the document's key topics and concepts. The resulting summary is presented to the user on the \textit{Upload Dashboard} page, where it can be freely edited before the exam is configured.
+
+This user-editable summary serves two purposes. First, it gives the user a quick sanity check that the document was parsed correctly. Second, the (possibly edited) summary is stored as the \textbf{primary context} for subsequent generation calls, allowing instructors to steer the LLM towards the aspects of the material they consider most examinable — effectively injecting domain expertise without modifying any prompts.
+
+\subsection{Exam Generator}
+
+The exam generator is the core engine of the system. Its responsibilities are:
+
+\begin{enumerate}[leftmargin=1.5em]
+  \item \textbf{Prompt construction.} A structured prompt is assembled from: (a) the document context chunks retrieved via BM25, (b) the user-edited summary, (c) the requested question counts per type, (d) any additional user requirements (e.g.\ ``include two coding questions on recursion''), and (e) surgical correction hints from previous failed validation attempts.
+  \item \textbf{LLM invocation.} The prompt is sent to \textbf{Gemini 2.0 Flash} (with \textbf{Gemini 1.5 Flash} as fallback). The model is instructed to return a strict JSON array where each element represents one question.
+  \item \textbf{Over-generation buffer.} To compensate for questions that may be rejected by the validator, the generator requests $\lceil 1.5 \times n \rceil$ questions per type, where $n$ is the user's requested count.
+\end{enumerate}
+
+Supported question types and their JSON schema fields are:
+
+\begin{center}
+\begin{tabular}{lll}
+  \toprule
+  \textbf{Type} & \textbf{Key fields} & \textbf{Notes} \\
+  \midrule
+  \texttt{mcq}           & \texttt{question}, \texttt{options}, \texttt{answer}  & 4 options (A–D) \\
+  \texttt{true\_false}   & \texttt{question}, \texttt{answer}                    & answer: ``True'' / ``False'' \\
+  \texttt{short\_answer} & \texttt{question}, \texttt{answer}                    & free-text answer \\
+  \texttt{coding}        & \texttt{question}, \texttt{code\_snippet}, \texttt{answer} & snippet required \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+User-supplied \textit{additional requirements} (e.g.\ focus area, coding topic) are placed at the top of the feedback section of the prompt so that the LLM weights them with highest priority.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.92\linewidth]{exam_config}
+  \caption{Exam configuration page — users set question counts per type, difficulty, time limit, and optional focus requirements.}
+  \label{fig:exam_config}
+\end{figure}
+
+\subsection{Validator Agent}
+
+Before the exam is delivered to the front end, every generated question passes through a multi-tier rule-based validation pipeline. The system allows up to \textbf{5 attempts} (1 initial + 4 retries); if the count target is not met after all attempts, the best available set is returned.
+
+\subsubsection*{Validation criteria}
+
+\begin{enumerate}[label=\textbf{Tier \arabic*.}, leftmargin=2.5em, itemsep=0.4em]
+  \item \textbf{Structural integrity.}
+        Every question must contain all required fields for its type. Short-answer questions must have a minimum word count (12 words in strict mode, 8 in relaxed mode on the final attempt). Coding questions must include a non-empty \texttt{code\_snippet}.
+
+  \item \textbf{Concept-key deduplication (Tier 0 / strict).}
+        Each question carries a \texttt{concept\_key} field in slash-separated hierarchical form (e.g.\ \texttt{algorithms/sorting/merge\_sort}). In strict mode, no two questions may share the same prefix up to depth 2, preventing the exam from dwelling on one subtopic.
+
+  \item \textbf{Text-similarity deduplication (Tiers 1 \& 2).}
+        \begin{itemize}
+          \item \textit{Tier 1:} SequenceMatcher ratio $\geq 0.65$ between any two question texts flags a duplicate.
+          \item \textit{Tier 1b:} For MCQ questions, sharing $\geq 3$ identical options also counts as a duplicate.
+          \item \textit{Tier 2:} Stemmed Jaccard similarity $\geq 0.40$ on the question token sets flags a near-duplicate.
+        \end{itemize}
+
+  \item \textbf{Answer grounding.}
+        The question text and its expected answer are checked against the retrieved context chunks via \texttt{\_text\_in\_context} (SequenceMatcher $\geq 0.50$, relaxed to $0.35$ on the final attempt). A question whose answer cannot be traced back to the source material is rejected.
+\end{enumerate}
+
+\textbf{Special treatment for coding questions.} A coding question that contains a valid \texttt{code\_snippet} is considered self-grounded — the snippet is the source material reference — and therefore skips both the Tier-0 concept-key dedup check and the answer-grounding check. Only text-similarity dedup (Tiers 1 \& 2) is applied, preventing identical coding exercises from appearing twice.
+
+\textbf{Surgical retry feedback.} When a question is rejected as a duplicate, the validator records \textit{which} accepted question it duplicates and \textit{which} concept-key prefix is already covered. This information is embedded in the next prompt as targeted correction hints, guiding the LLM to produce a genuinely different question rather than a paraphrase.
+
+\subsection{Grading and Result Analysis Agent}
+
+Once the user submits the exam, responses are graded per question type.
+Figure~\ref{fig:preview_page} shows the exam-taking interface with a countdown timer, question navigation panel, and per-question flagging.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.92\linewidth]{preview_page}
+  \caption{Exam-taking interface — countdown timer, question navigation, and flag-for-review controls.}
+  \label{fig:preview_page}
+\end{figure}
+
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{MCQ and True/False.} Exact string comparison; instantly scored.
+  \item \textbf{Short-answer and coding (hybrid grading).}
+        \begin{enumerate}
+          \item An embedding model computes the cosine similarity between the student's response and the reference answer.
+          \item If similarity $\geq$ threshold (auto-accept threshold), full marks are awarded without invoking the LLM.
+          \item Otherwise, the student's answer and reference answer are forwarded to Gemini, which returns a partial score and a brief justification.
+        \end{enumerate}
+\end{itemize}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.92\linewidth]{result_page}
+  \caption{Result review page — student answer alongside the reference answer, with cosine-similarity-based grading and a per-question explanation.}
+  \label{fig:result_page}
+\end{figure}
+
+After all questions are scored, the \textbf{result analysis agent} evaluates overall performance, identifies topic areas where the student performed well and poorly, and generates a natural-language feedback summary. Crucially, the identified weak areas are appended to the \textit{Additional Requirements} field in the exam configuration context, so that the next exam generated for the same student automatically emphasises topics requiring further review.
+
+\subsection{User Feedback}
+
+The system supports two levels of in-exam feedback:
+
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Per-question feedback.} After the exam is submitted and results are shown, users can give a thumbs-up or thumbs-down rating to each individual question. Negative ratings help instructors identify ambiguous or poorly phrased questions.
+  \item \textbf{Overall feedback.} A free-text feedback form is presented at the bottom of the review page, allowing users to comment on exam difficulty, topic coverage, or any other concerns. This feedback is stored alongside the exam record for instructor review.
+\end{itemize}
+
+% ╔══════════════════════════════════════════════════════════════╗
+% ║  III. CONTRIBUTIONS                                          ║
+% ╚══════════════════════════════════════════════════════════════╝
+\section{Contributions}
+
+\subsection{Use of AI-Assisted Development}
+
+We acknowledge that more than \textbf{60\% of the codebase} was written with the assistance of AI coding tools (GitHub Copilot and ChatGPT). However, AI assistance was primarily applied to \textit{repetitive} and \textit{boilerplate} tasks: library imports and dependency wiring, code refactoring and reformatting, and generating scaffolding for standard REST endpoint patterns. All core algorithmic decisions — the validation tier hierarchy, the hybrid grading strategy, the over-generation buffer, and the prompt engineering — were designed and iterated upon by the team members.
+
+\subsection{Individual Contributions}
+
+\begin{description}[style=nextline, leftmargin=2em, font=\bfseries]
+  \item[Pham Khac Duy (Main Contributor) — 220219]
+    Led the overall system design and architecture. Implemented the majority of the backend services, including the file processing and BM25 indexing pipeline, the exam generation service and prompt templates, the multi-tier validator agent, the retry orchestration logic in the generation endpoint, and the hybrid grading service. Also responsible for the Docker configuration and integration testing.
+
+  \item[Nguyen Dang Nhat Anh — 220069]
+    Contributed primarily to the React-based front end. Implemented the page components for upload, exam configuration, exam-taking, and result review. Built the per-question feedback UI (thumbs up/down) and the overall feedback form. Handled API integration between the frontend and the FastAPI backend.
+
+  \item[Nguyen Huynh Duc — 220080]
+    Improved the document processing pipeline by migrating the slide parser to use PyMuPDF, significantly increasing extraction speed and accuracy for PDF files. Built the content summarisation feature and the context preview interface, allowing users to review and edit the extracted context before generating an exam.
+\end{description}
+
+% ╔══════════════════════════════════════════════════════════════╗
+% ║  IV. CURRENT LIMITATIONS & FUTURE IMPROVEMENTS              ║
+% ╚══════════════════════════════════════════════════════════════╝
+\section{Current Limitations \& Future Improvements}
+
+\subsection{Validator Agent Shortcomings}
+
+Despite the multi-tier rule pipeline, the validator does not yet perform as reliably as desired. The following issues were observed during testing:
+
+\begin{enumerate}[leftmargin=1.5em, itemsep=0.3em]
+  \item \textbf{Missing questions.} The validator may reject more questions than the buffer can recover from, resulting in a delivered exam that contains fewer questions than the user requested — particularly when the source document covers a narrow topic and the LLM has limited room to vary question phrasing.
+
+  \item \textbf{Topic concentration.} Instead of generating questions spread broadly across the document, the LLM tends to concentrate on one or two prominent subtopics. Although the concept-key deduplication tier was designed to prevent this, the LLM sometimes bypasses it by rephrasing questions under slightly different keys.
+
+  \item \textbf{Disguised duplicate questions.} Questions that are semantically identical but expressed in different wordings or posed as a different question type (e.g.\ the same fact tested as both an MCQ and a short-answer question) can slip past the text-similarity thresholds used in Tiers 1 and 2. A deeper semantic similarity check — for instance using a sentence-transformer model — would be needed to catch these cases reliably.
+\end{enumerate}
+
+\subsection{Proposed Improvements}
+
+\begin{enumerate}[leftmargin=1.5em, itemsep=0.3em]
+  \item \textbf{Dense-vector RAG with a strong embedding model.}
+    Replacing or augmenting BM25 with a dense retrieval pipeline (e.g.\ using \texttt{sentence-transformers} or OpenAI's embedding API) would improve recall for paraphrased content and enable the system to scale to much larger documents — full textbooks or multi-chapter course packs — without quality degradation.
+
+  \item \textbf{Semantic deduplication.}
+    Embedding each generated question and computing pairwise cosine similarity would catch semantically equivalent questions that evade surface-level text matching, addressing the disguised-duplicate problem described above.
+
+  \item \textbf{Structured diversity constraints.}
+    Enforcing a per-section or per-chapter question quota at the prompt level (rather than relying solely on post-generation validation) would more reliably produce broad topic coverage across the entire document.
+
+  \item \textbf{Fine-tuned grading model.}
+    The current LLM fallback for short-answer grading may be inconsistent for highly technical answers. Fine-tuning a smaller model on a curated grading rubric would improve scoring consistency and reduce API costs.
+\end{enumerate}
+
+\end{document}

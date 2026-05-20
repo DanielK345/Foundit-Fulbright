@@ -1,113 +1,39 @@
-# Exam Generator
+# AI Exam Generator
 
-A full-stack web application that generates high-quality exam questions from uploaded lecture materials (PDF / PPTX). Questions are strictly grounded in the uploaded content. A Two-Stage BM25 pipeline handles long documents efficiently without GPU embeddings, while a pair of LLM agents handle content summarization and post-exam result analysis.
+> Transform lecture slides and PDFs into a ready-to-use examination in minutes, powered by Google Gemini.
 
-## Pipeline Overview
+A full-stack web application that generates high-quality exam questions strictly grounded in uploaded content. A two-stage BM25 pipeline handles long documents efficiently without GPU embeddings, while a pair of LLM agents handle content summarisation and post-exam result analysis.
 
-### End-to-End Flow
+## Architecture
 
-```mermaid
-flowchart TB
-    subgraph Frontend
-        A["UploadPage\n(PDF / PPTX)"] -->|POST /upload| B["ReviewIdeasPage\n(review & edit context)"]
-        B -->|POST /generate| C["ConfigPage\n(exam settings)"]
-        C -->|POST /generate| D["ExamPage\n(take exam)"]
-        D -->|POST /grade| E["Results\n(score + analysis)"]
-        E -->|"Re-generate\n(same materials)"| C
-    end
+![System architecture](assets/diagram.png)
 
-    subgraph Backend ["Backend — Generation Pipeline"]
-        direction TB
-        U["Upload Route"] --> P["Parser\n(pdfplumber / python-pptx)"]
-        P -->|"pages + original_pages\n{source, content}"| STORE["documents_store\n(in-memory)"]
-        STORE -->|"> 15 pages?"| BM25{"BM25 Retrieval?"}
-        BM25 -->|"yes — long doc"| R1["Stage 1: Structural\n(regex homework detection)"]
-        R1 --> R2["Stage 2: BM25 per topic\n(rank_bm25, CPU-only)"]
-        R2 -->|"top-20 pages\n(source order)"| GEN
-        BM25 -->|"no — short doc\nfull context"| GEN["Generator\n(gemini-2.0-flash)"]
-        GEN -->|"raw questions JSON"| VAL["Validator\n(structure + grounding + dedup)"]
-        VAL -->|"rejected?"| RETRY{"Retry?\n(up to 2x,\nlower temp)"}
-        RETRY -->|yes| GEN
-        RETRY -->|no| EXAM["Exam stored\nin memory"]
-    end
+The pipeline runs: **File ingestion → Content summarisation → BM25 retrieval → Question generation → Validation (with retry) → Exam delivery → Hybrid grading → Result analysis → Feedback loop**.
 
-    subgraph Agents ["LLM Agents"]
-        direction LR
-        CS["Content Summarizer\ncontent_summarizer.py"]
-        RA["Result Analyzer\nresult_analyzer.py"]
-    end
+For documents exceeding 15 pages, BM25 retrieval activates automatically. Stage 1 uses regex to detect structural problem/exercise blocks; Stage 2 ranks remaining pages by topic relevance, keeping a maximum of 20 pages. Short documents use full context directly.
 
-    subgraph Grading ["Grading Pipeline"]
-        direction TB
-        GR_IN["Student answers"] --> MCQ_TF["MCQ / True-False\n(exact match)"]
-        GR_IN --> SA["Short Answer"]
-        SA --> S1["Stage 1: Embed + Cosine Similarity\n(gemini-embedding-001)"]
-        S1 -->|"> 0.85"| CORRECT["Correct"]
-        S1 -->|"< 0.50"| WRONG["Incorrect"]
-        S1 -->|"0.50 – 0.85"| S2["Stage 2: LLM Fallback\n(gemini-2.0-flash)"]
-        S2 --> VERDICT["Correct / Incorrect\n+ feedback"]
-        MCQ_TF --> SCORE["Final Score"]
-        CORRECT --> SCORE
-        WRONG --> SCORE
-        VERDICT --> SCORE
-    end
+Short-answer grading uses a two-stage hybrid approach: cosine similarity via `gemini-embedding-001` auto-accepts answers above 0.85 and auto-rejects below 0.50 — only the inconclusive middle band triggers an LLM call, keeping API costs low.
 
-    A -->|files| U
-    B -->|GET ideas| CS
-    C -->|ExamConfig + focus| BM25
-    D -->|answers| GR_IN
-    EXAM --> D
-    SCORE --> E
-    E -->|POST analyze| RA
-    RA -->|"recommendations\n→ feedback_store"| C
-```
+## Screenshots
 
-### BM25 Retrieval Detail
-
-Activated automatically when a document exceeds 15 pages (e.g. textbooks, homework sets).
-
-```mermaid
-flowchart LR
-    PAGES["All original pages"] --> S1["Stage 1 — Structural\n(regex: problem / exercise / question + number)"]
-    S1 -->|"always included"| MERGE
-    PAGES --> S2["Stage 2 — BM25 per topic\n(topics extracted from focus text)"]
-    S2 -->|"top-3 per topic, max 20 total"| MERGE["Deduplicate + restore\nsource order"]
-    MERGE -->|"≥ 5 chunks?"| OK["Pass to Generator"]
-    MERGE -->|"< 5 (sparse match)"| FB["Fallback: all pages"]
-    FB --> OK
-```
-
-### Data Flow Through Services
-
-```mermaid
-flowchart LR
-    PDF["PDF / PPTX\nfiles"] --> parser["parser.py\nparse_file()"]
-    parser -->|"[{source, content}]"| bm25["bm25_retriever.py\nretrieve_chunks()"]
-    bm25 -->|"relevant pages"| generator["generator.py\ngenerate_questions()"]
-    generator -->|"raw questions"| validator["validator.py\nvalidate_questions()"]
-    validator -->|"valid questions"| grader["grader.py\ngrade_exam()"]
-    grader -->|"score + details"| result["GradeResponse"]
-    grader -->|"graded details"| analyzer["result_analyzer.py\nanalyze_results()"]
-    analyzer -->|"recommendations"| feedback_store["feedback_store\n(in-memory)"]
-```
-
-### Short Answer Grading Detail
-
-```mermaid
-flowchart TD
-    INPUT["Student answer + Reference answer"] --> EMBED["Embed both\n(gemini-embedding-001)"]
-    EMBED --> COS["Cosine Similarity"]
-    COS --> HIGH{"sim > 0.85?"}
-    HIGH -->|yes| C["CORRECT\n(no LLM call)"]
-    HIGH -->|no| LOW{"sim < 0.50?"}
-    LOW -->|yes| W["INCORRECT\n(no LLM call)"]
-    LOW -->|no| LLM["LLM Fallback\n(gemini-2.0-flash\ntemp=0.1, JSON mode)"]
-    LLM --> V["CORRECT / INCORRECT\n+ feedback"]
-
-    style C fill:#dcfce7,stroke:#22c55e,color:#166534
-    style W fill:#fef2f2,stroke:#ef4444,color:#991b1b
-    style V fill:#dbeafe,stroke:#2563eb,color:#1e40af
-```
+<table>
+  <tr>
+    <td align="center"><b>Upload</b></td>
+    <td align="center"><b>Configure</b></td>
+  </tr>
+  <tr>
+    <td><img src="assets/main_page.png"/></td>
+    <td><img src="assets/exam_config.png"/></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Take exam</b></td>
+    <td align="center"><b>Review results</b></td>
+  </tr>
+  <tr>
+    <td><img src="assets/preview_page.png"/></td>
+    <td><img src="assets/results_page.png"/></td>
+  </tr>
+</table>
 
 ## Features
 
