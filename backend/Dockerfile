@@ -17,12 +17,13 @@ WORKDIR /app
 
 # Non-root user for security
 RUN addgroup -S spring && adduser -S spring -G spring
-USER spring
 
 COPY --from=builder /app/target/foundit-backend-1.0.0.jar app.jar
 
-# Upload directory (mount a volume in production)
-RUN mkdir -p uploads
+# Upload directory — create as root, then hand ownership to spring
+RUN mkdir -p uploads && chown -R spring:spring /app
+
+USER spring
 
 EXPOSE 8080
 
