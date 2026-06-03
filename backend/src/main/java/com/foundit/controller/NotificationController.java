@@ -21,7 +21,7 @@ public class NotificationController {
     @GetMapping
     public ResponseEntity<List<NotificationResponse>> getNotifications(
             @AuthenticationPrincipal User currentUser) {
-        return ResponseEntity.ok(notificationService.getNotifications(currentUser.getId()));
+        return ResponseEntity.ok(notificationService.getNotificationsForUser(currentUser.getId()));
     }
 
     @PutMapping("/{id}/read")
@@ -36,10 +36,5 @@ public class NotificationController {
             @AuthenticationPrincipal User currentUser) {
         long count = notificationService.getUnreadCount(currentUser.getId());
         return ResponseEntity.ok(Map.of("count", count));
-    }
-
-    @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<Map<String, String>> handleBadRequest(IllegalArgumentException ex) {
-        return ResponseEntity.badRequest().body(Map.of("message", ex.getMessage()));
     }
 }

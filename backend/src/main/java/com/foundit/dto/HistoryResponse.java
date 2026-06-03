@@ -12,8 +12,10 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @NoArgsConstructor
 public class HistoryResponse {
+
     private Long id;
     private String actionType;
-    private Long itemId;
     private LocalDateTime timestamp;
+    private Long itemId;
+    private String itemName;
 }

@@ -11,6 +11,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @RestController
@@ -22,20 +23,26 @@ public class MatchController {
     private final ItemService itemService;
 
     @GetMapping("/item/{itemId}")
-    public ResponseEntity<List<ItemResponse>> getMatchesForItem(
+    public ResponseEntity<List<Map<String, Object>>> getMatchesForItem(
             @PathVariable Long itemId,
             @AuthenticationPrincipal User currentUser) {
-        List<Match> matches = matchRepository.findByLostItemIdOrFoundItemId(itemId, itemId);
 
-        List<ItemResponse> results = matches.stream()
-                .map(m -> {
-                    // Return the OTHER item in the match pair
-                    boolean isLost = m.getLostItem().getId().equals(itemId);
-                    return isLost
-                            ? itemService.toResponse(m.getFoundItem(), currentUser.getId())
-                            : itemService.toResponse(m.getLostItem(), currentUser.getId());
-                })
+        List<Match> lostMatches = matchRepository.findByLostItemId(itemId);
+        List<Match> foundMatches = matchRepository.findByFoundItemId(itemId);
+
+        List<Map<String, Object>> results = lostMatches.stream()
+                .map(m -> Map.<String, Object>of(
+                        "matchId", m.getId(),
+                        "score", m.getSimilarityScore(),
+                        "matchedItem", itemService.toResponse(m.getFoundItem())))
                 .collect(Collectors.toList());
+
+        results.addAll(foundMatches.stream()
+                .map(m -> Map.<String, Object>of(
+                        "matchId", m.getId(),
+                        "score", m.getSimilarityScore(),
+                        "matchedItem", itemService.toResponse(m.getLostItem())))
+                .collect(Collectors.toList()));
 
         return ResponseEntity.ok(results);
     }
