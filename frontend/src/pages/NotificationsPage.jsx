@@ -1,80 +1,139 @@
-import { useEffect, useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Bell, CheckCircle } from 'lucide-react'
 import { getNotifications, markRead } from '../api/notifications'
-import { getLatestNotifications, timeAgo } from '../utils/notifications'
 import LoadingSpinner from '../components/LoadingSpinner'
-import { Bell, CheckCircle, MessageSquare } from 'lucide-react'
+import { getLatestNotifications } from '../utils/notifications'
 
 export default function NotificationsPage() {
+  const navigate = useNavigate()
   const [notifications, setNotifications] = useState([])
   const [loading, setLoading] = useState(true)
-  const navigate = useNavigate()
+  const [filter, setFilter] = useState('all') // 'all' | 'unread'
 
   useEffect(() => {
-    getNotifications()
-      .then(res => setNotifications(res.data || []))
-      .catch(() => {})
-      .finally(() => setLoading(false))
+    const fetchNotifications = async () => {
+      try {
+        const res = await getNotifications()
+        setNotifications(res.data || res)
+      } catch {
+        // ignore
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchNotifications()
   }, [])
 
-  const handleClick = async (notif) => {
-    if (notif.status === 'UNREAD') {
-      try { await markRead(notif.id) } catch (_) {}
-      setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, status: 'READ' } : n))
-    }
-    if (notif.chatSenderId) {
-      navigate(`/chat/${notif.chatSenderId}${notif.relatedItemId ? `?itemId=${notif.relatedItemId}` : ''}`)
-    } else if (notif.foundItemId && notif.lostItemId) {
-      navigate(`/items/${notif.lostItemId}?verifyFoundItem=${notif.foundItemId}`)
-    } else if (notif.relatedItemId) {
-      navigate(`/items/${notif.relatedItemId}`)
+  const handleMarkRead = async (id) => {
+    try {
+      await markRead(id)
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, status: 'READ' } : n))
+      )
+    } catch {
+      // ignore
     }
   }
 
-  const displayed = getLatestNotifications(notifications)
+  const handleNotificationClick = async (n) => {
+    if (n.status === 'UNREAD') {
+      await handleMarkRead(n.id)
+    }
+    if (n.chatSenderId) {
+      const chatUrl = n.relatedItemId
+        ? `/chat/${n.chatSenderId}?itemId=${n.relatedItemId}`
+        : `/chat/${n.chatSenderId}`
+      navigate(chatUrl)
+    }
+    else if (n.lostItemId) navigate(`/items/${n.lostItemId}`)
+    else if (n.foundItemId) navigate(`/items/${n.foundItemId}`)
+  }
+
+  const latestNotifications = getLatestNotifications(notifications)
+  const displayed = filter === 'unread'
+    ? latestNotifications.filter((n) => n.status === 'UNREAD')
+    : latestNotifications
+
+  const unreadCount = latestNotifications.filter((n) => n.status === 'UNREAD').length
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return ''
+    return new Date(dateStr).toLocaleString('en-US', {
+      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+    })
+  }
 
   return (
-    <div className="max-w-2xl mx-auto px-6 py-6">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Notifications</h1>
+    <div className="max-w-2xl mx-auto px-4 py-6">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Notifications</h1>
+          {unreadCount > 0 && (
+            <p className="text-sm text-gray-500 mt-0.5">{unreadCount} unread</p>
+          )}
+        </div>
+      </div>
+
+      {/* Filter tabs */}
+      <div className="flex gap-1 bg-gray-100 p-1 rounded-lg mb-4 w-fit">
+        {['all', 'unread'].map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setFilter(tab)}
+            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors capitalize ${
+              filter === tab ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
 
       {loading ? (
-        <div className="flex justify-center py-16"><LoadingSpinner size="xl" /></div>
+        <div className="flex justify-center py-12"><LoadingSpinner /></div>
       ) : displayed.length === 0 ? (
-        <div className="text-center py-20 text-gray-400">
-          <Bell size={40} className="mx-auto mb-3 opacity-30" />
-          <p className="font-medium">No notifications yet</p>
+        <div className="flex flex-col items-center py-16 text-center">
+          <Bell size={40} className="text-gray-200 mb-3" />
+          <p className="text-gray-500 font-medium">
+            {filter === 'unread' ? 'No unread notifications' : 'No notifications yet'}
+          </p>
+          <p className="text-sm text-gray-400 mt-1">
+            You'll be notified when a potential match is found for your item.
+          </p>
         </div>
       ) : (
-        <div className="flex flex-col gap-2">
-          {displayed.map(notif => {
-            const isUnread = notif.status === 'UNREAD'
-            const isChat = !!notif.chatSenderId
-            return (
-              <button
-                key={notif.id}
-                onClick={() => handleClick(notif)}
-                className={`w-full text-left flex items-start gap-3 p-4 rounded-2xl border transition-colors hover:shadow-sm ${
-                  isUnread ? 'bg-blue-50 border-blue-100' : 'bg-white border-gray-100'
-                }`}
-              >
-                <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${isUnread ? 'bg-blue-100' : 'bg-gray-100'}`}>
-                  {isChat
-                    ? <MessageSquare size={16} className={isUnread ? 'text-blue-600' : 'text-gray-400'} />
-                    : isUnread
-                      ? <Bell size={16} className="text-blue-600" />
-                      : <CheckCircle size={16} className="text-gray-400" />
-                  }
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className={`text-sm leading-snug ${isUnread ? 'font-medium text-gray-900' : 'text-gray-700'}`}>
-                    {notif.message}
-                  </p>
-                  <p className="text-xs text-gray-400 mt-0.5">{timeAgo(notif.timestamp)}</p>
-                </div>
-                {isUnread && <div className="w-2 h-2 rounded-full bg-blue-500 mt-1.5 flex-shrink-0" />}
-              </button>
-            )
-          })}
+        <div className="space-y-2">
+          {displayed.map((n) => (
+            <div
+              key={n.id}
+              onClick={() => handleNotificationClick(n)}
+              className={`flex items-start gap-3 p-4 rounded-xl cursor-pointer transition-colors border ${
+                n.status === 'UNREAD'
+                  ? 'bg-blue-50 border-blue-100 hover:bg-blue-100'
+                  : 'bg-white border-gray-100 hover:bg-gray-50'
+              }`}
+            >
+              <div className={`mt-0.5 w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                n.status === 'UNREAD' ? 'bg-blue-600' : 'bg-gray-200'
+              }`}>
+                {n.status === 'READ' ? (
+                  <CheckCircle size={16} className="text-gray-500" />
+                ) : (
+                  <Bell size={16} className="text-white" />
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className={`text-sm ${n.status === 'UNREAD' ? 'font-semibold text-gray-900' : 'text-gray-700'}`}>
+                  {n.message}
+                </p>
+                <p className="text-xs text-gray-400 mt-0.5">{formatDate(n.timestamp)}</p>
+              </div>
+              {n.status === 'UNREAD' && (
+                <div className="w-2 h-2 bg-blue-600 rounded-full mt-2 flex-shrink-0" />
+              )}
+            </div>
+          ))}
         </div>
       )}
     </div>
