@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react'
 
-const PING_URL = (import.meta.env.VITE_API_BASE_URL ?? '') + '/api/items'
+// Use GET (not HEAD) — HEAD is not in the backend's CORS allowedMethods list,
+// which causes cross-origin HEAD requests to be rejected by the CORS filter even
+// though the server is running. GET /api/items is explicitly permitted.
+const BASE = import.meta.env.VITE_API_BASE_URL ?? ''
+const PING_URL = BASE + '/api/items'
 const INTERVAL_MS = 30_000
 
 /**
@@ -8,7 +12,7 @@ const INTERVAL_MS = 30_000
  *   'checking' | 'online' | 'offline'
  *
  * Any HTTP response (even 4xx/5xx) means the server is reachable → 'online'.
- * Only a network-level failure (no response / timeout) → 'offline'.
+ * Only a network-level failure (no response / timeout / CORS error) → 'offline'.
  */
 export function useBackendStatus() {
   const [status, setStatus] = useState('checking')
@@ -18,10 +22,12 @@ export function useBackendStatus() {
 
     async function ping() {
       try {
-        await fetch(PING_URL, { method: 'HEAD', signal: AbortSignal.timeout(6000) })
-        // Any response means the backend is up
+        // GET instead of HEAD — avoids CORS rejection for non-listed methods
+        await fetch(PING_URL, { method: 'GET', signal: AbortSignal.timeout(10000) })
+        // Any response (200, 403, 503…) means the network path is open
         if (!cancelled) setStatus('online')
-      } catch {
+      } catch (err) {
+        console.warn('[BackendStatus] ping failed →', err?.name, err?.message, '| URL:', PING_URL)
         if (!cancelled) setStatus('offline')
       }
     }
