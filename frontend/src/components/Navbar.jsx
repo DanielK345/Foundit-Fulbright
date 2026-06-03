@@ -5,6 +5,7 @@ import { Client } from '@stomp/stompjs'
 import { useAuth } from '../context/AuthContext'
 import { getNotifications, markRead } from '../api/notifications'
 import { getLatestNotifications } from '../utils/notifications'
+import { useBackendStatus } from '../hooks/useBackendStatus'
 
 function timeAgo(dateStr) {
   if (!dateStr) return ''
@@ -15,9 +16,16 @@ function timeAgo(dateStr) {
   return `${Math.floor(diff / 86400)}d`
 }
 
+const STATUS_CONFIG = {
+  checking: { dot: 'bg-yellow-400 animate-pulse', text: 'Connecting…', label: 'text-yellow-600' },
+  online:   { dot: 'bg-green-400',               text: 'Backend online',  label: 'text-green-600' },
+  offline:  { dot: 'bg-red-500',                 text: 'Backend offline', label: 'text-red-600'   },
+}
+
 export default function Navbar() {
   const { user, isAuthenticated, logout } = useAuth()
   const navigate = useNavigate()
+  const backendStatus = useBackendStatus()
 
   const [notifications, setNotifications] = useState([])
   const [notifOpen, setNotifOpen] = useState(false)
@@ -131,13 +139,24 @@ export default function Navbar() {
     <nav className="bg-white sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
 
-        {/* Logo */}
-        <Link to="/" className="flex items-center gap-2 flex-shrink-0">
-          <div className="w-10 h-10 rounded-full bg-brand-gold flex items-center justify-center">
-            <span className="font-bold text-lg" style={{ color: '#03045E' }}>F</span>
-          </div>
-          <span className="font-bold text-base" style={{ color: '#03045E' }}>FoundIt Fulbright</span>
-        </Link>
+        {/* Logo + backend status */}
+        <div className="flex items-center gap-3 flex-shrink-0">
+          <Link to="/" className="flex items-center gap-2">
+            <div className="w-10 h-10 rounded-full bg-brand-gold flex items-center justify-center">
+              <span className="font-bold text-lg" style={{ color: '#03045E' }}>F</span>
+            </div>
+            <span className="font-bold text-base" style={{ color: '#03045E' }}>FoundIt Fulbright</span>
+          </Link>
+          <span
+            className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gray-100 border border-gray-200"
+            title={`Backend status: ${backendStatus}`}
+          >
+            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${STATUS_CONFIG[backendStatus].dot}`} />
+            <span className={`text-[11px] font-medium ${STATUS_CONFIG[backendStatus].label}`}>
+              {STATUS_CONFIG[backendStatus].text}
+            </span>
+          </span>
+        </div>
 
         {/* Right side — nav links + actions */}
         <div className="flex items-center gap-3">
