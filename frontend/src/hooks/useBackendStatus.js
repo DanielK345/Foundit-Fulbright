@@ -23,7 +23,7 @@ export function useBackendStatus() {
     async function ping() {
       try {
         // GET instead of HEAD — avoids CORS rejection for non-listed methods
-        await fetch(PING_URL, { method: 'GET', signal: AbortSignal.timeout(10000) })
+        await fetch(PING_URL, { method: 'GET', signal: AbortSignal.timeout(30000) })
         // Any response (200, 403, 503…) means the network path is open
         if (!cancelled) setStatus('online')
       } catch (err) {
