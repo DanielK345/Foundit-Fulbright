@@ -27,20 +27,23 @@ public class AuthController {
     }
 
     @PostMapping("/forgot-password")
-    public ResponseEntity<Map<String, String>> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+    public ResponseEntity<Map<String, String>> forgotPassword(
+            @Valid @RequestBody ForgotPasswordRequest request) {
         authService.forgotPassword(request.getEmail());
-        return ResponseEntity.ok(Map.of("message", "If the email exists, a reset code has been sent"));
+        return ResponseEntity.ok(Map.of("message", "If this email is registered, a reset code has been sent."));
     }
 
     @PostMapping("/verify-reset-code")
-    public ResponseEntity<Map<String, Object>> verifyResetCode(@RequestBody VerifyResetCodeRequest request) {
-        boolean valid = authService.verifyResetCode(request.getEmail(), request.getCode());
-        return ResponseEntity.ok(Map.of("valid", valid));
+    public ResponseEntity<Map<String, String>> verifyResetCode(
+            @Valid @RequestBody VerifyResetCodeRequest request) {
+        authService.verifyResetCode(request.getEmail(), request.getCode());
+        return ResponseEntity.ok(Map.of("message", "Code verified"));
     }
 
     @PostMapping("/reset-password")
-    public ResponseEntity<Map<String, String>> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
-        authService.resetPassword(request);
+    public ResponseEntity<Map<String, String>> resetPassword(
+            @Valid @RequestBody ResetPasswordRequest request) {
+        authService.resetPassword(request.getEmail(), request.getCode(), request.getNewPassword());
         return ResponseEntity.ok(Map.of("message", "Password reset successfully"));
     }
 }

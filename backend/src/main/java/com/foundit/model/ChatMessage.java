@@ -19,24 +19,22 @@ public class ChatMessage {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "sender_id", nullable = false)
+    @JoinColumn(name = "sender_id")
     private User sender;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "recipient_id", nullable = false)
+    @JoinColumn(name = "recipient_id")
     private User recipient;
 
-    @Column(columnDefinition = "TEXT", nullable = false)
+    @Column(columnDefinition = "TEXT")
     private String content;
 
     @CreationTimestamp
     private LocalDateTime sentAt;
 
-    @Column(nullable = false)
-    private boolean read = false;
+    private boolean read;
 
-    @Column(nullable = false)
-    private boolean senderIsAnonymous = false;
+    private boolean senderIsAnonymous;
 
     private Long relatedItemId;
 }

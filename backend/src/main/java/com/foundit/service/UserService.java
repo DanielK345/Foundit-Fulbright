@@ -56,20 +56,7 @@ public class UserService {
         user.setPassword(passwordEncoder.encode(newPassword));
         userRepository.save(user);
     }
-
-    @Transactional(readOnly = true)
-    public List<HistoryResponse> getHistory(Long userId) {
-        return userHistoryRepository.findByUserIdOrderByTimestampDesc(userId)
-                .stream()
-                .map(h -> HistoryResponse.builder()
-                        .id(h.getId())
-                        .actionType(h.getActionType())
-                        .itemId(h.getItemId())
-                        .timestamp(h.getTimestamp())
-                        .build())
-                .collect(Collectors.toList());
-    }
-
+    
     private UserProfileResponse toResponse(User user) {
         return UserProfileResponse.builder()
                 .id(user.getId())
