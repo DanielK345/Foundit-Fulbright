@@ -1,48 +1,40 @@
-/**
- * De-duplicates notifications: for each semantic group (chat thread, match, item pair),
- * only keep the most recent notification.
- */
-export function getLatestNotifications(notifications) {
-  const groups = new Map()
-
-  for (const n of notifications) {
-    let key
-
-    if (n.chatSenderId) {
-      key = `chat:${n.chatSenderId}`
-    } else if (n.matchId) {
-      key = `match:${n.matchId}`
-    } else if (n.lostItemId && n.foundItemId) {
-      key = `item:${n.lostItemId}:${n.foundItemId}`
-    } else {
-      key = `notification:${n.id}`
-    }
-
-    const existing = groups.get(key)
-    if (!existing) {
-      groups.set(key, n)
-    } else {
-      const existingTime = new Date(existing.timestamp).getTime()
-      const newTime = new Date(n.timestamp).getTime()
-      if (newTime > existingTime || (newTime === existingTime && n.id > existing.id)) {
-        groups.set(key, n)
-      }
-    }
-  }
-
-  return Array.from(groups.values()).sort(
-    (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
-  )
+function getNotificationTime(notification) {
+  const timestamp = notification?.timestamp ? new Date(notification.timestamp).getTime() : 0
+  return Number.isNaN(timestamp) ? 0 : timestamp
 }
 
-export function timeAgo(timestamp) {
-  if (!timestamp) return ''
-  const diff = Date.now() - new Date(timestamp).getTime()
-  const mins = Math.floor(diff / 60000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  const hrs = Math.floor(mins / 60)
-  if (hrs < 24) return `${hrs}h ago`
-  const days = Math.floor(hrs / 24)
-  return `${days}d ago`
+function getNotificationGroupKey(notification) {
+  if (notification?.chatSenderId) return `chat:${notification.chatSenderId}`
+  if (notification?.matchId) return `match:${notification.matchId}`
+  if (notification?.lostItemId || notification?.foundItemId) {
+    return `item:${notification.lostItemId ?? 'none'}:${notification.foundItemId ?? 'none'}`
+  }
+  return `notification:${notification?.id ?? 'unknown'}`
+}
+
+export function getLatestNotifications(notifications = []) {
+  const latestByGroup = new Map()
+
+  notifications.forEach((notification) => {
+    const groupKey = getNotificationGroupKey(notification)
+    const current = latestByGroup.get(groupKey)
+
+    if (!current) {
+      latestByGroup.set(groupKey, notification)
+      return
+    }
+
+    const currentTime = getNotificationTime(current)
+    const nextTime = getNotificationTime(notification)
+
+    if (nextTime > currentTime || (nextTime === currentTime && (notification.id ?? 0) > (current.id ?? 0))) {
+      latestByGroup.set(groupKey, notification)
+    }
+  })
+
+  return Array.from(latestByGroup.values()).sort((a, b) => {
+    const timeDiff = getNotificationTime(b) - getNotificationTime(a)
+    if (timeDiff !== 0) return timeDiff
+    return (b.id ?? 0) - (a.id ?? 0)
+  })
 }
