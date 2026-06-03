@@ -1,164 +1,296 @@
-import { useState, useEffect } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { Upload, X } from 'lucide-react'
 import { getItem, updateItem, uploadImage } from '../api/items'
-import ImageUpload from '../components/ImageUpload'
 import LoadingSpinner from '../components/LoadingSpinner'
-import toast from 'react-hot-toast'
-import { ChevronLeft } from 'lucide-react'
 
 const LOCATIONS = [
-  'Main Building', 'Library', 'Cafeteria', 'Gym', 'Parking Lot',
-  'Student Lounge', 'Auditorium', 'Science Lab', 'Computer Lab', 'Other'
+  'Common Area GF', 'Library', 'Maker Space',
+  'Classroom 1', 'Classroom 2', 'Classroom 3', 'Classroom 4',
+  'Classroom 5', 'Classroom 6', 'Classroom 7', 'Other',
 ]
-const CATEGORIES = ['Electronics', 'Clothing', 'Accessories', 'Books', 'Stationery', 'Keys', 'Bag', 'ID/Card', 'Other']
 
 export default function EditItemPage() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const [form, setForm] = useState(null)
-  const [newImageFile, setNewImageFile] = useState(null)
+  const fileInputRef = useRef(null)
+
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
+  const [isFound, setIsFound] = useState(true)
+  const [form, setForm] = useState({
+    name: '', description: '', category: '',
+    locationFound: '', date: '', isPublic: 'Yes',
+  })
+  const [existingImageUrls, setExistingImageUrls] = useState([])
+  const [imageFiles, setImageFiles] = useState([])
+  const [imagePreviews, setImagePreviews] = useState([])
+  const [uploading, setUploading] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     getItem(id)
       .then(res => {
-        const d = res.data
+        const item = res.data
+        setIsFound(item.itemType === 'FOUND')
         setForm({
-          name: d.name || '',
-          description: d.description || '',
-          category: d.category || '',
-          locationFound: d.locationFound || '',
-          dateEvent: d.dateEvent || '',
-          isPublic: d.isPublic !== false,
-          imageUrl: d.imageUrl || '',
+          name: item.name || '',
+          description: item.description || '',
+          category: item.category || '',
+          locationFound: item.locationFound || '',
+          date: item.dateEvent || '',
+          isPublic: item.isPublic === false ? 'No' : 'Yes',
         })
+        if (item.imageUrl) {
+          setExistingImageUrls(item.imageUrl.split('|').filter(Boolean))
+        }
       })
-      .catch(() => toast.error('Item not found'))
+      .catch(() => setError('Failed to load item.'))
       .finally(() => setLoading(false))
   }, [id])
 
-  const set = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.value }))
+  const handleChange = (e) =>
+    setForm(prev => ({ ...prev, [e.target.name]: e.target.value }))
+
+  const handleFileChange = (e) => {
+    const files = Array.from(e.target.files)
+    if (!files.length) return
+    for (const file of files) {
+      if (!file.type.startsWith('image/')) { setError('Please select image files only.'); return }
+      if (file.size > 10 * 1024 * 1024) { setError('Each image must be smaller than 10MB.'); return }
+    }
+    setError('')
+    setImageFiles(prev => [...prev, ...files])
+    setImagePreviews(prev => [...prev, ...files.map(f => URL.createObjectURL(f))])
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  const removeExistingImage = (index) => {
+    setExistingImageUrls(prev => prev.filter((_, i) => i !== index))
+  }
+
+  const removeNewImage = (index) => {
+    setImageFiles(prev => prev.filter((_, i) => i !== index))
+    setImagePreviews(prev => prev.filter((_, i) => i !== index))
+  }
 
   const handleSubmit = async (e) => {
-    e.preventDefault()
-    setSaving(true)
-    try {
-      let imageUrl = form.imageUrl
-      if (newImageFile) {
-        const res = await uploadImage(newImageFile)
-        const existing = form.imageUrl ? form.imageUrl.split('|').filter(Boolean) : []
-        imageUrl = [...existing, res.data].join('|')
+    e?.preventDefault()
+    if (!form.name.trim()) { setError('Item name is required.'); return }
+    setError('')
+
+    let newUrls = []
+    if (imageFiles.length > 0) {
+      setUploading(true)
+      try {
+        newUrls = await Promise.all(imageFiles.map(async (file) => {
+          const res = await uploadImage(file)
+          return res.data.url
+        }))
+      } catch {
+        setError('Failed to upload images. Please try again.')
+        setUploading(false)
+        return
       }
-      await updateItem(id, { ...form, imageUrl })
-      toast.success('Item updated!')
+      setUploading(false)
+    }
+
+    const imageUrl = [...existingImageUrls, ...newUrls].join('|')
+
+    setSubmitting(true)
+    try {
+      await updateItem(id, {
+        name: form.name,
+        description: form.description,
+        category: form.category,
+        locationFound: form.locationFound,
+        imageUrl,
+        dateEvent: form.date || null,
+        isPublic: form.isPublic !== 'No',
+      })
       navigate(`/items/${id}`)
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to update')
+      setError(err.response?.data?.message || 'Failed to save changes. Please try again.')
     } finally {
-      setSaving(false)
+      setSubmitting(false)
     }
   }
 
-  const removeExistingImage = (url) => {
-    const remaining = form.imageUrl.split('|').filter(u => u !== url)
-    setForm(p => ({ ...p, imageUrl: remaining.join('|') }))
+  const inputCls = 'w-full px-4 py-2.5 border border-gray-200 rounded-full text-sm text-gray-700 outline-none focus:border-gray-400 bg-white appearance-none'
+  const labelCls = 'block text-sm text-gray-700 mb-2'
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-24">
+        <LoadingSpinner />
+      </div>
+    )
   }
 
-  if (loading) return <div className="flex justify-center py-24"><LoadingSpinner size="xl" /></div>
-  if (!form) return null
-
-  const inputClass = "w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-gold/40 focus:border-brand-gold"
-  const labelClass = "block text-sm font-medium text-gray-700 mb-1"
-  const existingImages = form.imageUrl ? form.imageUrl.split('|').filter(Boolean) : []
-
   return (
-    <div className="max-w-xl mx-auto px-6 py-6">
-      <button onClick={() => navigate(-1)} className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800 mb-6 transition-colors">
-        <ChevronLeft size={16} /> Back
-      </button>
+    <div className="bg-gray-50 flex items-start justify-center pt-0 pb-10 px-6">
+      <div className="w-full max-w-7xl">
+        <div className="px-10 pt-8 pb-10">
+          <p className="text-left text-base font-medium mb-6 text-gray-800">
+            {isFound ? 'Edit your found item report' : 'Edit your lost item report'}
+          </p>
+          <form onSubmit={handleSubmit}>
 
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Edit Item</h1>
+            <div className="grid grid-cols-2 gap-20 mb-5">
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-        <div>
-          <label className={labelClass}>Item name *</label>
-          <input required value={form.name} onChange={set('name')} className={inputClass} />
-        </div>
-
-        <div>
-          <label className={labelClass}>Category</label>
-          <select value={form.category} onChange={set('category')} className={inputClass}>
-            <option value="">Select category…</option>
-            {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
-        </div>
-
-        <div>
-          <label className={labelClass}>Description</label>
-          <textarea value={form.description} onChange={set('description')} rows={3}
-            className={inputClass + ' resize-none'} />
-        </div>
-
-        <div>
-          <label className={labelClass}>Location</label>
-          <select value={form.locationFound} onChange={set('locationFound')} className={inputClass}>
-            <option value="">Select location…</option>
-            {LOCATIONS.map(l => <option key={l} value={l}>{l}</option>)}
-          </select>
-        </div>
-
-        <div>
-          <label className={labelClass}>Date</label>
-          <input type="date" value={form.dateEvent} onChange={set('dateEvent')} className={inputClass} />
-        </div>
-
-        {/* Existing images */}
-        {existingImages.length > 0 && (
-          <div>
-            <label className={labelClass}>Current photos</label>
-            <div className="flex gap-2 flex-wrap">
-              {existingImages.map((url, i) => (
-                <div key={i} className="relative">
-                  <img src={url} alt="" className="w-20 h-20 object-cover rounded-xl border border-gray-200" />
-                  <button type="button" onClick={() => removeExistingImage(url)}
-                    className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center">✕</button>
+              {/* Left column */}
+              <div className="flex flex-col gap-5">
+                <div>
+                  <label className={labelCls}>Item Name</label>
+                  <input
+                    name="name"
+                    type="text"
+                    value={form.name}
+                    onChange={handleChange}
+                    className={inputCls}
+                    placeholder="e.g. Student card, Laptop..."
+                  />
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
+                <div>
+                  <label className={labelCls}>Location</label>
+                  <div className="relative">
+                    <select
+                      name="locationFound"
+                      value={form.locationFound}
+                      onChange={handleChange}
+                      className={inputCls}
+                    >
+                      <option value=""></option>
+                      {LOCATIONS.map(loc => <option key={loc} value={loc}>{loc}</option>)}
+                    </select>
+                    <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-gray-400">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <label className={labelCls}>{isFound ? 'Date Found' : 'Date Lost'}</label>
+                  <div className="relative">
+                    <input
+                      name="date"
+                      type="date"
+                      value={form.date}
+                      onChange={handleChange}
+                      max={new Date().toISOString().split('T')[0]}
+                      className={inputCls}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className={labelCls}>Do you want to public your name on this post?</label>
+                  <div className="relative">
+                    <select
+                      name="isPublic"
+                      value={form.isPublic}
+                      onChange={handleChange}
+                      className={inputCls}
+                    >
+                      <option value="Yes">Yes</option>
+                      <option value="No">No</option>
+                    </select>
+                    <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-gray-500">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                    </span>
+                  </div>
+                </div>
+              </div>
 
-        {/* Add new image */}
-        {!newImageFile ? (
-          <div>
-            <label className={labelClass}>Add photo</label>
-            <ImageUpload onImageSelect={(f) => setNewImageFile(f)} />
-          </div>
-        ) : (
-          <div>
-            <label className={labelClass}>New photo</label>
-            <div className="relative w-20">
-              <img src={URL.createObjectURL(newImageFile)} alt="" className="w-20 h-20 object-cover rounded-xl border border-gray-200" />
-              <button type="button" onClick={() => setNewImageFile(null)}
-                className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center">✕</button>
+              {/* Right column — description */}
+              <div className="flex flex-col">
+                <label className={labelCls}>Description</label>
+                <textarea
+                  name="description"
+                  value={form.description}
+                  onChange={handleChange}
+                  className="flex-1 w-full px-4 py-3 border border-gray-200 rounded-2xl text-sm text-gray-700 outline-none focus:border-gray-400 bg-white resize-none"
+                  style={{ minHeight: '220px' }}
+                  placeholder="Describe the item — colour, brand, distinguishing features..."
+                />
+              </div>
             </div>
-          </div>
-        )}
 
-        <div className="flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-3">
-          <input type="checkbox" id="isPublic" checked={form.isPublic}
-            onChange={e => setForm(p => ({ ...p, isPublic: e.target.checked }))}
-            className="w-4 h-4 rounded text-brand-gold" />
-          <label htmlFor="isPublic" className="text-sm font-medium text-gray-700 cursor-pointer">Make my contact info visible</label>
+            {/* Photo Upload */}
+            <div className="mb-2">
+              <label className={labelCls}>Photo Upload</label>
+              {(existingImageUrls.length > 0 || imagePreviews.length > 0) && (
+                <div className="flex flex-wrap gap-3 mb-3">
+                  {existingImageUrls.map((url, i) => (
+                    <div key={`existing-${i}`} className="relative border border-gray-200 rounded-2xl overflow-hidden" style={{ width: '120px', height: '100px' }}>
+                      <img src={url} alt={`Image ${i + 1}`} className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => removeExistingImage(i)}
+                        className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-0.5 hover:bg-red-600"
+                      >
+                        <X size={11} />
+                      </button>
+                    </div>
+                  ))}
+                  {imagePreviews.map((src, i) => (
+                    <div key={`new-${i}`} className="relative border border-gray-200 rounded-2xl overflow-hidden" style={{ width: '120px', height: '100px' }}>
+                      <img src={src} alt={`New ${i + 1}`} className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => removeNewImage(i)}
+                        className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-0.5 hover:bg-red-600"
+                      >
+                        <X size={11} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full py-2.5 border border-gray-200 rounded-full text-sm text-gray-500 flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors bg-white"
+              >
+                <Upload size={15} />
+                Add More Images
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleFileChange}
+                className="hidden"
+              />
+            </div>
+
+            {error && <p className="text-red-500 text-sm mt-3 text-center">{error}</p>}
+
+            <div className="flex justify-center mt-6 gap-4">
+              <button
+                type="button"
+                onClick={() => navigate(`/items/${id}`)}
+                className="px-12 py-2.5 rounded-full text-sm font-bold border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSubmit}
+                disabled={submitting || uploading}
+                className="px-12 py-2.5 rounded-full text-sm font-bold disabled:opacity-60 transition-opacity hover:opacity-90 flex items-center gap-2 whitespace-nowrap"
+                style={{ backgroundColor: '#F5A623', color: '#ffffff' }}
+              >
+                {uploading ? <><LoadingSpinner size="sm" color="white" /> Uploading...</>
+                 : submitting ? <><LoadingSpinner size="sm" color="white" /> Saving...</>
+                 : 'Save Changes'}
+              </button>
+            </div>
+          </form>
         </div>
-
-        <button type="submit" disabled={saving}
-          className="w-full py-3 rounded-full bg-brand-gold text-white font-semibold flex items-center justify-center gap-2 hover:bg-yellow-500 transition-colors disabled:opacity-60">
-          {saving ? <LoadingSpinner size="sm" color="white" /> : null}
-          {saving ? 'Saving…' : 'Save Changes'}
-        </button>
-      </form>
+      </div>
     </div>
   )
 }
