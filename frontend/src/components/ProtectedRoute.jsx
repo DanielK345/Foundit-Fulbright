@@ -8,5 +8,6 @@ export default function ProtectedRoute({ children }) {
   if (!isAuthenticated) {
     return <Navigate to={`/login?returnTo=${encodeURIComponent(location.pathname)}`} replace />
   }
+
   return children
 }
