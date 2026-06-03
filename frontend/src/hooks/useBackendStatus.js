@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react'
 
-// Use GET (not HEAD) — HEAD is not in the backend's CORS allowedMethods list,
-// which causes cross-origin HEAD requests to be rejected by the CORS filter even
-// though the server is running. GET /api/items is explicitly permitted.
+// Ping /api/health — a no-DB, no-auth endpoint that returns 200 instantly.
+// Avoids using /api/items which queries the database and may time out on cold start.
 const BASE = import.meta.env.VITE_API_BASE_URL ?? ''
-const PING_URL = BASE + '/api/items'
+const PING_URL = BASE + '/api/health'
 const INTERVAL_MS = 30_000
 
 /**
@@ -19,6 +18,7 @@ export function useBackendStatus() {
 
   useEffect(() => {
     let cancelled = false
+    console.info('[BackendStatus] pinging', PING_URL)
 
     async function ping() {
       try {
