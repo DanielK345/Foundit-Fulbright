@@ -15,6 +15,7 @@ backend/uploads/
 # IDE
 .idea/
 .vscode/
+.github/
 *.iml
 
 # OS
