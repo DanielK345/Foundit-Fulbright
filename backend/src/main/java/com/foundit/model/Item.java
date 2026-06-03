@@ -7,6 +7,7 @@ import org.hibernate.annotations.CreationTimestamp;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
+
 @Entity
 @Table(name = "items")
 @Data
@@ -20,36 +21,38 @@ public class Item {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
+    @JoinColumn(name = "user_id")
     private User user;
 
-    @Column(nullable = false)
     private String name;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
     private ItemStatus itemType;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private ItemStatus status;
 
     @Column(columnDefinition = "TEXT")
     private String description;
+
+    @CreationTimestamp
+    private LocalDateTime datePosted;
 
     private String locationFound;
 
     private String category;
 
+    @Enumerated(EnumType.STRING)
+    private ItemStatus status;
+
+    @Column(columnDefinition = "TEXT")
     private String imageUrl;
-
-    @CreationTimestamp
-    private LocalDateTime datePosted;
-
-    private LocalDate dateEvent;
 
     private Long claimantId;
 
-    @Column(nullable = false)
-    private boolean isPublic = true;
+    private LocalDate dateEvent;
+
+    @Column(name = "is_public")
+    private Boolean isPublic;
+
+    public boolean isPublic() {
+        return isPublic == null || isPublic;
+    }
 }

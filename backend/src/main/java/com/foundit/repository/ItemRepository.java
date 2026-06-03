@@ -14,28 +14,18 @@ public interface ItemRepository extends JpaRepository<Item, Long> {
 
     List<Item> findByStatusNotOrderByDatePostedDesc(ItemStatus status);
 
-    List<Item> findByUserIdOrderByDatePostedDesc(Long userId);
-
-    List<Item> findByStatusAndItemTypeNotOrderByDatePostedDesc(ItemStatus status, ItemStatus itemType);
-
-    List<Item> findByItemTypeAndStatusNotOrderByDatePostedDesc(ItemStatus itemType, ItemStatus excludedStatus);
+    List<Item> findByStatusAndCategoryIgnoreCaseOrderByDatePostedDesc(ItemStatus status, String category);
 
     @Query("SELECT i FROM Item i WHERE i.status <> :claimed AND " +
            "(LOWER(i.name) LIKE LOWER(CONCAT('%', :kw, '%')) OR " +
            "LOWER(i.description) LIKE LOWER(CONCAT('%', :kw, '%')))")
     List<Item> searchByKeyword(@Param("kw") String keyword, @Param("claimed") ItemStatus claimed);
 
-    @Query("SELECT i FROM Item i WHERE i.status <> :claimed AND " +
-           "LOWER(i.category) = LOWER(:category) ORDER BY i.datePosted DESC")
-    List<Item> findByCategoryExcludingClaimed(@Param("category") String category,
-                                               @Param("claimed") ItemStatus claimed);
+    List<Item> findAllByOrderByDatePostedDesc();
 
-    @Query("SELECT i FROM Item i WHERE i.status <> :claimed AND " +
-           "LOWER(i.category) = LOWER(:category) AND " +
-           "(LOWER(i.name) LIKE LOWER(CONCAT('%', :kw, '%')) OR " +
-           "LOWER(i.description) LIKE LOWER(CONCAT('%', :kw, '%'))) " +
-           "ORDER BY i.datePosted DESC")
-    List<Item> searchByCategoryAndKeyword(@Param("category") String category,
-                                           @Param("kw") String keyword,
-                                           @Param("claimed") ItemStatus claimed);
+    List<Item> findByUserIdOrderByDatePostedDesc(Long userId);
+
+    List<Item> findByItemTypeAndStatusNot(ItemStatus itemType, ItemStatus excludeStatus);
+
+    boolean existsByUserIdAndIsPublicFalse(Long userId);
 }

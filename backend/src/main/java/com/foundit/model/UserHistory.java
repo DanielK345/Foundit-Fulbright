@@ -19,14 +19,15 @@ public class UserHistory {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
+    @JoinColumn(name = "user_id")
     private User user;
 
-    private Long itemId;
-
-    @Column(nullable = false)
-    private String actionType;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "item_id", nullable = true)
+    private Item item;
 
     @CreationTimestamp
     private LocalDateTime timestamp;
+
+    private String actionType;
 }

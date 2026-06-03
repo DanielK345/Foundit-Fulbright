@@ -10,7 +10,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @NoArgsConstructor
 public class ClaimVerificationResponse {
-    private boolean success;
+    private boolean matched;
     private int score;
     private String message;
     private ItemResponse item;
