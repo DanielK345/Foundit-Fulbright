@@ -20,8 +20,9 @@ export function useWebSocket({ onNotification, onMessage, enabled }) {
   useEffect(() => {
     if (!enabled || !token) return
 
+    const wsBase = import.meta.env.VITE_API_BASE_URL ?? ''
     const client = new Client({
-      webSocketFactory: () => new SockJS('/ws'),
+      webSocketFactory: () => new SockJS(wsBase + '/ws'),
       connectHeaders: { Authorization: `Bearer ${token}` },
       onConnect: () => {
         client.subscribe('/user/queue/notifications', (frame) => {
