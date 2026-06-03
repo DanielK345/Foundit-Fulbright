@@ -1,6 +1,8 @@
 package com.foundit.security;
 
-import io.jsonwebtoken.*;
+import com.foundit.model.User;
+import io.jsonwebtoken.JwtException;
+import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
@@ -13,51 +15,52 @@ import java.util.Date;
 public class JwtTokenProvider {
 
     @Value("${app.jwt.secret}")
-    private String jwtSecret;
+    private String secret;
 
     @Value("${app.jwt.expiration-ms}")
-    private long jwtExpirationMs;
+    private long expirationMs;
 
     private SecretKey getSigningKey() {
-        byte[] keyBytes = Decoders.BASE64.decode(jwtSecret);
-        return Keys.hmacShaKeyFor(keyBytes);
+        return Keys.hmacShaKeyFor(Decoders.BASE64.decode(secret));
     }
 
-    public String generateToken(String email, Long userId) {
-        Date now = new Date();
-        Date expiry = new Date(now.getTime() + jwtExpirationMs);
-
+    public String generateToken(User user) {
         return Jwts.builder()
-                .subject(email)
-                .claim("userId", userId)
-                .issuedAt(now)
-                .expiration(expiry)
+                .subject(user.getEmail())
+                .claim("userId", user.getId())
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + expirationMs))
                 .signWith(getSigningKey())
                 .compact();
     }
 
     public String getEmailFromToken(String token) {
-        return parseClaims(token).getSubject();
-    }
-
-    public Long getUserIdFromToken(String token) {
-        return parseClaims(token).get("userId", Long.class);
-    }
-
-    public boolean validateToken(String token) {
-        try {
-            parseClaims(token);
-            return true;
-        } catch (JwtException | IllegalArgumentException e) {
-            return false;
-        }
-    }
-
-    private Claims parseClaims(String token) {
         return Jwts.parser()
                 .verifyWith(getSigningKey())
                 .build()
                 .parseSignedClaims(token)
-                .getPayload();
+                .getPayload()
+                .getSubject();
+    }
+
+    public Long getUserIdFromToken(String token) {
+        return Jwts.parser()
+                .verifyWith(getSigningKey())
+                .build()
+                .parseSignedClaims(token)
+                .getPayload()
+                .get("userId", Long.class);
+    }
+
+    public boolean validateToken(String token) {
+        try {
+            Jwts.parser()
+                .verifyWith(getSigningKey())
+                .build()
+                .parseSignedClaims(token);
+            return true;
+        } catch (JwtException | IllegalArgumentException e) {
+            return false;
+        }
     }
 }
