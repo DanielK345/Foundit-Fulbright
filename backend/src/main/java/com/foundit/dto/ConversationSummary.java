@@ -12,12 +12,14 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @NoArgsConstructor
 public class ConversationSummary {
+
     private Long partnerId;
     private String partnerName;
-    private String partnerProfilePicture;
-    private Long relatedItemId;
-    private String relatedItemName;
+    private String partnerEmail;
+    private Long itemId;
+    private String itemName;
     private String lastMessage;
     private LocalDateTime lastMessageTime;
-    private long unreadCount;
+    private int unreadCount;
+    private boolean partnerIsAnonymous;
 }

@@ -12,14 +12,14 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @NoArgsConstructor
 public class ChatMessageResponse {
+
     private Long id;
     private Long senderId;
     private String senderName;
-    private String senderProfilePicture;
     private Long recipientId;
+    private String recipientName;
     private String content;
     private LocalDateTime sentAt;
     private boolean read;
     private boolean senderIsAnonymous;
-    private Long relatedItemId;
 }
