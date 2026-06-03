@@ -4,9 +4,9 @@ A lost-and-found platform for the Fulbright University community. Students and s
 
 ---
 
-##Backend url (Deployed on Render, so wait for server spin-up before running Frontend): https://foundit-backend-zwc1.onrender.com
+## Backend url (Deployed on Render, so wait for server spin-up before running Frontend): https://foundit-backend-zwc1.onrender.com
 
-##Frontend url (Deployed on Vercel): https://foundit-frontend-one.vercel.app/
+## Frontend url (Deployed on Vercel): https://foundit-frontend-one.vercel.app/
 
 ## Demo
 
