@@ -1,159 +1,250 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
+import { Upload, X } from 'lucide-react'
 import { reportFound, reportLost, uploadImage } from '../api/items'
-import ImageUpload from '../components/ImageUpload'
 import LoadingSpinner from '../components/LoadingSpinner'
-import toast from 'react-hot-toast'
-import { MapPin } from 'lucide-react'
 
 const LOCATIONS = [
-  'Main Building', 'Library', 'Cafeteria', 'Gym', 'Parking Lot',
-  'Student Lounge', 'Auditorium', 'Science Lab', 'Computer Lab', 'Other'
+  'Common Area GF', 'Library', 'Maker Space',
+  'Classroom 1', 'Classroom 2', 'Classroom 3', 'Classroom 4',
+  'Classroom 5', 'Classroom 6', 'Classroom 7', 'Other',
 ]
-const CATEGORIES = ['Electronics', 'Clothing', 'Accessories', 'Books', 'Stationery', 'Keys', 'Bag', 'ID/Card', 'Other']
 
 export default function PostItemPage() {
   const location = useLocation()
-  const isLost = location.pathname.includes('/lost')
+  const isFound = !location.pathname.includes('/lost')
   const navigate = useNavigate()
+  const fileInputRef = useRef(null)
 
   const [form, setForm] = useState({
-    name: '', description: '', category: '', locationFound: '', dateEvent: '', isPublic: true
+    name: '', description: '', category: '',
+    locationFound: '', date: '', isPublic: 'Yes',
   })
   const [imageFiles, setImageFiles] = useState([])
-  const [loading, setLoading] = useState(false)
+  const [imagePreviews, setImagePreviews] = useState([])
+  const [uploading, setUploading] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
 
-  const set = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.value }))
+  const handleChange = (e) =>
+    setForm(prev => ({ ...prev, [e.target.name]: e.target.value }))
 
-  const handleImageSelect = (file) => {
-    setImageFiles(prev => [...prev, file])
+  const handleFileChange = (e) => {
+    const files = Array.from(e.target.files)
+    if (!files.length) return
+    for (const file of files) {
+      if (!file.type.startsWith('image/')) { setError('Please select image files only.'); return }
+      if (file.size > 10 * 1024 * 1024) { setError('Each image must be smaller than 10MB.'); return }
+    }
+    setError('')
+    setImageFiles(prev => [...prev, ...files])
+    setImagePreviews(prev => [...prev, ...files.map(f => URL.createObjectURL(f))])
+    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
-  const removeImage = (idx) => {
-    setImageFiles(prev => prev.filter((_, i) => i !== idx))
+  const removeImage = (index) => {
+    setImageFiles(prev => prev.filter((_, i) => i !== index))
+    setImagePreviews(prev => prev.filter((_, i) => i !== index))
   }
 
   const handleSubmit = async (e) => {
-    e.preventDefault()
-    if (!form.name.trim()) { toast.error('Please enter the item name'); return }
-    setLoading(true)
+    e?.preventDefault()
+    if (!form.name.trim()) { setError('Item name is required.'); return }
+    setError('')
 
+    let imageUrl = ''
+    if (imageFiles.length > 0) {
+      setUploading(true)
+      try {
+        const urls = await Promise.all(imageFiles.map(async (file) => {
+          const res = await uploadImage(file)
+          return res.data.url
+        }))
+        imageUrl = urls.join('|')
+      } catch {
+        setError('Failed to upload images. Please try again.')
+        setUploading(false)
+        return
+      }
+      setUploading(false)
+    }
+
+    setSubmitting(true)
     try {
-      let imageUrl = ''
-      if (imageFiles.length > 0) {
-        const uploadPromises = imageFiles.map(f => uploadImage(f))
-        const uploadResults = await Promise.all(uploadPromises)
-        imageUrl = uploadResults.map(r => r.data).join('|')
-      }
-
-      const payload = { ...form, imageUrl, isPublic: form.isPublic === true || form.isPublic === 'true' }
-      if (isLost) {
-        await reportLost(payload)
-        toast.success('Lost item reported!')
-      } else {
-        await reportFound(payload)
-        toast.success('Found item reported!')
-      }
-      navigate('/')
+      const submit = isFound ? reportFound : reportLost
+      const res = await submit({
+        name: form.name,
+        description: form.description,
+        category: form.category,
+        locationFound: form.locationFound,
+        imageUrl,
+        dateEvent: form.date || null,
+        isPublic: form.isPublic !== 'No',
+      })
+      const item = res.data || res
+      navigate(`/items/${item.id}`)
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to post item')
+      setError(err.response?.data?.message || 'Failed to submit. Please try again.')
     } finally {
-      setLoading(false)
+      setSubmitting(false)
     }
   }
 
-  const inputClass = "w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-gold/40 focus:border-brand-gold"
-  const labelClass = "block text-sm font-medium text-gray-700 mb-1"
+  const inputCls = 'w-full px-4 py-2.5 border border-gray-200 rounded-full text-sm text-gray-700 outline-none focus:border-gray-400 bg-white appearance-none'
+  const labelCls = 'block text-sm text-gray-700 mb-2'
 
   return (
-    <div className="max-w-xl mx-auto px-6 py-6">
-      <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium mb-6 ${isLost ? 'bg-red-100 text-red-700' : 'bg-yellow-50 text-yellow-700'}`}>
-        {isLost ? '🔴 Report Lost Item' : '🟡 Report Found Item'}
-      </div>
+    <div className="bg-gray-50 flex items-start justify-center pt-0 pb-10 px-6">
+      <div className="w-full max-w-7xl">
 
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">
-        {isLost ? 'I lost something' : 'I found something'}
-      </h1>
+        {/* Card */}
+        <div className="px-10 pt-8 pb-10">
+          <p className="text-left text-base font-medium mb-6 text-gray-800">
+            {isFound
+              ? 'Fill this form to report the items that you found'
+              : 'Fill this form to report the items that you lost'}
+          </p>
+          <form onSubmit={handleSubmit}>
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-        {/* Item name */}
-        <div>
-          <label className={labelClass}>Item name *</label>
-          <input required value={form.name} onChange={set('name')} className={inputClass} placeholder="e.g. Black AirPods Pro" />
-        </div>
+            {/* 2-column: left fields + right description */}
+            <div className="grid grid-cols-2 gap-20 mb-5">
 
-        {/* Category */}
-        <div>
-          <label className={labelClass}>Category</label>
-          <select value={form.category} onChange={set('category')} className={inputClass}>
-            <option value="">Select category…</option>
-            {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
-        </div>
-
-        {/* Description */}
-        <div>
-          <label className={labelClass}>Description</label>
-          <textarea value={form.description} onChange={set('description')} rows={3}
-            className={inputClass + ' resize-none'}
-            placeholder="Describe the item — brand, color, distinctive features…" />
-        </div>
-
-        {/* Location */}
-        <div>
-          <label className={labelClass}>{isLost ? 'Last seen location' : 'Where found'}</label>
-          <select value={form.locationFound} onChange={set('locationFound')} className={inputClass}>
-            <option value="">Select location…</option>
-            {LOCATIONS.map(l => <option key={l} value={l}>{l}</option>)}
-          </select>
-        </div>
-
-        {/* Date */}
-        <div>
-          <label className={labelClass}>Date {isLost ? 'lost' : 'found'}</label>
-          <input type="date" value={form.dateEvent} onChange={set('dateEvent')} className={inputClass} />
-        </div>
-
-        {/* Images */}
-        <div>
-          <label className={labelClass}>Photos <span className="text-gray-400 font-normal">(up to 3)</span></label>
-          {imageFiles.length > 0 && (
-            <div className="flex gap-2 flex-wrap mb-2">
-              {imageFiles.map((f, i) => (
-                <div key={i} className="relative">
-                  <img src={URL.createObjectURL(f)} alt="" className="w-20 h-20 object-cover rounded-xl border border-gray-200" />
-                  <button type="button" onClick={() => removeImage(i)}
-                    className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center">✕</button>
+              {/* Left column */}
+              <div className="flex flex-col gap-5">
+                <div>
+                  <label className={labelCls}>Item Name</label>
+                  <input
+                    name="name"
+                    type="text"
+                    value={form.name}
+                    onChange={handleChange}
+                    className={inputCls}
+                    placeholder="e.g. Student card, Laptop..."
+                  />
                 </div>
-              ))}
+                <div>
+                  <label className={labelCls}>Location</label>
+                  <div className="relative">
+                    <select
+                      name="locationFound"
+                      value={form.locationFound}
+                      onChange={handleChange}
+                      className={inputCls}
+                    >
+                      <option value=""></option>
+                      {LOCATIONS.map(loc => <option key={loc} value={loc}>{loc}</option>)}
+                    </select>
+                    <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-gray-400">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <label className={labelCls}>{isFound ? 'Date Found' : 'Date Lost'}</label>
+                  <div className="relative">
+                    <input
+                      name="date"
+                      type="date"
+                      value={form.date}
+                      onChange={handleChange}
+                      max={new Date().toISOString().split('T')[0]}
+                      className={inputCls}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className={labelCls}>Do you want to public your name on this post?</label>
+                  <div className="relative">
+                    <select
+                      name="isPublic"
+                      value={form.isPublic}
+                      onChange={handleChange}
+                      className={inputCls}
+                    >
+                      <option value="Yes">Yes</option>
+                      <option value="No">No</option>
+                    </select>
+                    <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-gray-500">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right column — description */}
+              <div className="flex flex-col">
+                <label className={labelCls}>Description</label>
+                <textarea
+                  name="description"
+                  value={form.description}
+                  onChange={handleChange}
+                  className="flex-1 w-full px-4 py-3 border border-gray-200 rounded-2xl text-sm text-gray-700 outline-none focus:border-gray-400 bg-white resize-none"
+                  style={{ minHeight: '220px' }}
+                  placeholder="Describe the item — colour, brand, distinguishing features..."
+                />
+              </div>
             </div>
-          )}
-          {imageFiles.length < 3 && (
-            <ImageUpload onImageSelect={handleImageSelect} />
-          )}
+
+            {/* Photo Upload — full width below */}
+            <div className="mb-2">
+              <label className={labelCls}>Photo Upload</label>
+              {imagePreviews.length > 0 && (
+                <div className="flex flex-wrap gap-3 mb-3">
+                  {imagePreviews.map((src, i) => (
+                    <div key={i} className="relative border border-gray-200 rounded-2xl overflow-hidden" style={{ width: '120px', height: '100px' }}>
+                      <img src={src} alt={`Preview ${i + 1}`} className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => removeImage(i)}
+                        className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-0.5 hover:bg-red-600"
+                      >
+                        <X size={11} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full py-2.5 border border-gray-200 rounded-full text-sm text-gray-500 flex items-center justify-center gap-2 hover:bg-gray-50 transition-colors bg-white"
+              >
+                <Upload size={15} />
+                {imagePreviews.length > 0 ? 'Add More Images' : 'Upload Images'}
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleFileChange}
+                className="hidden"
+              />
+            </div>
+
+            {error && <p className="text-red-500 text-sm mt-3 text-center">{error}</p>}
+
+            {/* Submit button */}
+            <div className="flex justify-center mt-6">
+              <button
+                onClick={handleSubmit}
+                disabled={submitting || uploading}
+                className="px-12 py-2.5 rounded-full text-sm font-bold disabled:opacity-60 transition-opacity hover:opacity-90 flex items-center gap-2 whitespace-nowrap"
+                style={{ backgroundColor: '#F5A623', color: '#ffffff' }}
+              >
+                {uploading ? <><LoadingSpinner size="sm" color="white" /> Uploading...</>
+                 : submitting ? <><LoadingSpinner size="sm" color="white" /> Submitting...</>
+                 : 'Submit'}
+              </button>
+            </div>
+          </form>
         </div>
 
-        {/* Privacy toggle */}
-        <div className="flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-3">
-          <input
-            type="checkbox"
-            id="isPublic"
-            checked={form.isPublic === true}
-            onChange={e => setForm(p => ({ ...p, isPublic: e.target.checked }))}
-            className="w-4 h-4 rounded text-brand-gold"
-          />
-          <div>
-            <label htmlFor="isPublic" className="text-sm font-medium text-gray-700 cursor-pointer">Make my contact info visible</label>
-            <p className="text-xs text-gray-400 mt-0.5">Others can see your name and email</p>
-          </div>
-        </div>
-
-        <button type="submit" disabled={loading}
-          className={`w-full py-3 rounded-full text-white font-semibold flex items-center justify-center gap-2 transition-colors disabled:opacity-60 ${isLost ? 'bg-red-500 hover:bg-red-600' : 'bg-brand-gold hover:bg-yellow-500'}`}>
-          {loading ? <LoadingSpinner size="sm" color="white" /> : null}
-          {loading ? 'Posting…' : isLost ? 'Post Lost Report' : 'Post Found Report'}
-        </button>
-      </form>
+      </div>
     </div>
   )
 }
