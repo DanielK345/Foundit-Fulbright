@@ -5,6 +5,7 @@ import toast from 'react-hot-toast'
 import { register as registerApi } from '../api/auth'
 import { useAuth } from '../context/AuthContext'
 import LoadingSpinner from '../components/LoadingSpinner'
+import BackendStatusBadge from '../components/BackendStatusBadge'
 import waterBottleCard from '../assets/water_bottle_card.png'
 
 export default function RegisterPage() {
@@ -42,12 +43,15 @@ export default function RegisterPage() {
       navigate('/', { replace: true })
     } catch (err) {
       console.error('Register error:', err)
-      console.error('Response data:', err.response?.data)
-      const msg = err.response?.data?.message
-        || (typeof err.response?.data === 'string' ? err.response.data : null)
-        || err.message
-        || 'Registration failed'
-      setError(msg)
+      if (!err.response) {
+        setError('Cannot reach the server. It may be starting up — please wait a moment and try again.')
+      } else {
+        console.error('Response data:', err.response?.data)
+        const msg = err.response?.data?.message
+          || (typeof err.response?.data === 'string' ? err.response.data : null)
+          || 'Registration failed'
+        setError(msg)
+      }
     } finally {
       setLoading(false)
     }
@@ -100,13 +104,21 @@ export default function RegisterPage() {
       <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-white">
         <div className="w-full max-w-md">
           {/* Mobile logo */}
-          <div className="flex items-center gap-3 mb-8 lg:hidden">
-            <div className="w-9 h-9 rounded-full bg-brand-gold flex items-center justify-center">
-              <span className="font-bold text-lg" style={{ color: '#03045E' }}>F</span>
+          <div className="flex items-center justify-between mb-8 lg:hidden">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-brand-gold flex items-center justify-center">
+                <span className="font-bold text-lg" style={{ color: '#03045E' }}>F</span>
+              </div>
+              <span className="font-bold text-lg" style={{ color: '#03045E' }}>
+                FoundIt Fulbright
+              </span>
             </div>
-            <span className="font-bold text-lg" style={{ color: '#03045E' }}>
-              FoundIt Fulbright
-            </span>
+            <BackendStatusBadge />
+          </div>
+
+          {/* Desktop status badge */}
+          <div className="hidden lg:flex justify-end mb-4">
+            <BackendStatusBadge />
           </div>
 
           <div className="mb-8">
